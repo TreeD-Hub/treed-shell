@@ -1,17 +1,23 @@
-﻿import { type CSSProperties, type ReactNode, useMemo } from 'react'
+﻿import { type CSSProperties, type ReactNode, useMemo, useState } from 'react'
 import { usePrinterCommands } from './core/commands'
 import { usePrinterSnapshot } from './core/store/usePrinterSnapshot'
 import './App.css'
 
 const NOZZLE_TARGET = 220
 const BED_TARGET = 60
-const SPEED_PERCENT = 100
 const FLOW_PERCENT = 95
 const FILE_NAME = 'test_cube_v2.gcode'
 const PROGRESS_PERCENT = 67
 const ETA_TIME = '12:34'
 const LAYER_CURRENT = 145
 const LAYER_TOTAL = 218
+const SPEED_MM_S = 180
+const ACCEL_MM_S2 = 6000
+const VOLUMETRIC_FLOW_MM3_S = 14.2
+const K_FACTOR_LA_PA = 0.035
+const RETRACT_MM = 0.8
+const Z_OFFSET_MM = -0.08
+const BABYSTEP_STEP_OPTIONS = [0.1, 0.05, 0.025] as const
 const SCREEN_WIDTH = 960
 const SCREEN_HEIGHT = 544
 const CSS_PPI = 96
@@ -32,20 +38,20 @@ function rounded(value: number): string {
 
 function statusLabel(raw: string): string {
   if (!raw) {
-    return 'Printing'
+    return 'Печать'
   }
 
   const lower = raw.toLowerCase()
 
   switch (lower) {
     case 'printing':
-      return 'Printing'
+      return 'Печать'
     case 'standby':
-      return 'Standby'
+      return 'Ожидание'
     case 'paused':
-      return 'Paused'
+      return 'Пауза'
     case 'complete':
-      return 'Complete'
+      return 'Завершено'
     default:
       return raw.charAt(0).toUpperCase() + raw.slice(1)
   }
@@ -215,6 +221,7 @@ function calculatePreviewZoom(settings: PreviewSettings): number {
 function App() {
   const { snapshot, refresh } = usePrinterSnapshot()
   const { pendingCommand, executeCommand } = usePrinterCommands()
+  const [babystepStep, setBabystepStep] = useState<number>(0.05)
   const previewSettings = useMemo(() => resolvePreviewSettings(), [])
   const hasPreviewScale = previewSettings.mode !== 'none'
   const previewZoom = useMemo(() => calculatePreviewZoom(previewSettings), [previewSettings])
@@ -250,13 +257,20 @@ function App() {
       <section className="screen-shell" data-testid="screen-shell">
         <header className="top-bar">
           <div className="brand-wrap">
-            <h1>TreeD Printer</h1>
+            <h1>TreeD Принтер</h1>
             <span className="print-state">{statusLabel(snapshot.state)}</span>
           </div>
-          <div className="top-icons" aria-label="status icons">
-            <WifiIcon />
-            <CloudIcon />
-            <button type="button" className="power-btn" aria-label="Power actions">
+          <div className="top-icons" aria-label="иконки статуса">
+            <button type="button" className="top-icon-btn" aria-label="Статус Wi-Fi">
+              <WifiIcon />
+            </button>
+            <button type="button" className="top-icon-btn" aria-label="Статус облака">
+              <CloudIcon />
+            </button>
+            <button type="button" className="top-icon-btn notification-btn" aria-label="Уведомления">
+              <span className="notification-icon" aria-hidden="true" />
+            </button>
+            <button type="button" className="top-icon-btn power-btn" aria-label="Питание">
               <PowerIcon />
             </button>
           </div>
@@ -275,11 +289,11 @@ function App() {
 
               <div className="job-metrics">
                 <div>
-                  <p className="label">Progress</p>
+                  <p className="label">Прогресс</p>
                   <p className="job-main-value">{PROGRESS_PERCENT}%</p>
                 </div>
                 <div className="job-metrics-right">
-                  <p className="label">ETA</p>
+                  <p className="label">Конец</p>
                   <p className="job-main-value">{ETA_TIME}</p>
                 </div>
               </div>
@@ -289,7 +303,7 @@ function App() {
               </div>
 
               <div className="job-layer-row">
-                <span className="label">Layer</span>
+                <span className="label">Слой</span>
                 <strong>
                   {LAYER_CURRENT} / {LAYER_TOTAL}
                 </strong>
@@ -302,22 +316,26 @@ function App() {
               <article className="stats-card">
                 <div className="temp-grid">
                   <div className="metric">
-                    <p className="label">Nozzle</p>
+                    <p className="label">Сопло</p>
                     <p className="value temp">
-                      {rounded(snapshot.extruderTemp)}<span>°C</span>
+                      <span className="temp-current">{rounded(snapshot.extruderTemp)}</span>
+                      <span className="temp-separator">/</span>
+                      <span className="temp-target">{NOZZLE_TARGET}</span>
+                      <span className="temp-unit">°C</span>
                     </p>
-                    <p className="hint">Target: {NOZZLE_TARGET}°C</p>
                     <div className="meter orange">
                       <div className="fill" style={{ width: `${nozzleFill}%` }} />
                     </div>
                   </div>
 
                   <div className="metric">
-                    <p className="label">Bed</p>
+                    <p className="label">Стол</p>
                     <p className="value temp">
-                      {rounded(snapshot.bedTemp)}<span>°C</span>
+                      <span className="temp-current">{rounded(snapshot.bedTemp)}</span>
+                      <span className="temp-separator">/</span>
+                      <span className="temp-target">{BED_TARGET}</span>
+                      <span className="temp-unit">°C</span>
                     </p>
-                    <p className="hint">Target: {BED_TARGET}°C</p>
                     <div className="meter green">
                       <div className="fill" style={{ width: `${bedFill}%` }} />
                     </div>
@@ -326,19 +344,19 @@ function App() {
 
                 <div className="three-up-grid">
                   <div className="metric compact">
-                    <p className="label">Speed</p>
-                    <p className="value percent">
-                      {SPEED_PERCENT}<span>%</span>
+                    <p className="label">Объемный расход</p>
+                    <p className="value process-value">
+                      {VOLUMETRIC_FLOW_MM3_S}<span>мм³/с</span>
                     </p>
                   </div>
                   <div className="metric compact">
-                    <p className="label">Model Fan</p>
+                    <p className="label">Обдув</p>
                     <p className="value percent">
                       {rounded(snapshot.modelFanPercent)}<span>%</span>
                     </p>
                   </div>
                   <div className="metric compact">
-                    <p className="label">Flow</p>
+                    <p className="label">Поток</p>
                     <p className="value percent">
                       {FLOW_PERCENT}<span>%</span>
                     </p>
@@ -346,34 +364,103 @@ function App() {
                 </div>
               </article>
 
-              <div className="action-stack" role="group" aria-label="print actions">
+              <div className="action-stack" role="group" aria-label="действия печати">
                 <button
                   type="button"
                   className="stack-action action-pause"
                   onClick={() => void handlePause()}
                   disabled={isBusy}
+                  aria-label={pendingCommand === 'pause' ? 'Пауза...' : 'Пауза'}
                 >
-                  {pendingCommand === 'pause' ? 'Pausing' : 'Pause'}
+                  <span className="action-icon icon-pause" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
                   className="stack-action action-cancel"
                   onClick={() => void handleStop()}
                   disabled={isBusy}
+                  aria-label={pendingCommand === 'cancel' ? 'Стоп...' : 'Стоп'}
                 >
-                  {pendingCommand === 'cancel' ? 'Canceling' : 'Cancel Print'}
+                  <span className="action-icon icon-stop-critical" aria-hidden="true" />
                 </button>
               </div>
+            </div>
+
+            <div className="process-row">
+              <article className="process-card">
+                <div className="process-grid">
+                  <div className="metric compact">
+                    <p className="label">Скорость</p>
+                    <p className="value process-value">
+                      {SPEED_MM_S}<span>мм/с</span>
+                    </p>
+                  </div>
+                  <div className="metric compact">
+                    <p className="label">Ускорение</p>
+                    <p className="value process-value">
+                      {ACCEL_MM_S2}<span>мм/с²</span>
+                    </p>
+                  </div>
+                  <div className="metric compact">
+                    <p className="label">K-factor</p>
+                    <p className="value process-value">
+                      {K_FACTOR_LA_PA}
+                    </p>
+                  </div>
+                  <div className="metric compact">
+                    <p className="label">Откат</p>
+                    <p className="value process-value">
+                      {RETRACT_MM}<span>мм</span>
+                    </p>
+                  </div>
+                </div>
+              </article>
+
+              <aside className="zoffset-card">
+                <p className="label">Z-offset</p>
+                <p className="value zoffset-value">
+                  {Z_OFFSET_MM.toFixed(2)}<span>мм</span>
+                </p>
+                <div className="step-selector" role="group" aria-label="шаг babystep">
+                  {BABYSTEP_STEP_OPTIONS.map((step) => (
+                    <button
+                      key={step}
+                      type="button"
+                      className={`step-btn ${babystepStep === step ? 'is-active' : ''}`}
+                      onClick={() => setBabystepStep(step)}
+                      aria-pressed={babystepStep === step}
+                    >
+                      {step}
+                    </button>
+                  ))}
+                </div>
+                <div className="babystep-controls" role="group" aria-label="управление babystep">
+                  <button
+                    type="button"
+                    className="babystep-btn"
+                    aria-label={`Babystep минус ${babystepStep}`}
+                  >
+                    -
+                  </button>
+                  <button
+                    type="button"
+                    className="babystep-btn"
+                    aria-label={`Babystep плюс ${babystepStep}`}
+                  >
+                    +
+                  </button>
+                </div>
+              </aside>
             </div>
           </section>
         </div>
 
-        <nav className="bottom-nav" aria-label="Main Navigation">
-          <NavItem label="Dashboard" icon={<DashboardIcon />} active />
-          <NavItem label="Control" icon={<ControlIcon />} />
-          <NavItem label="Files" icon={<FilesIcon />} />
-          <NavItem label="Macros" icon={<MacrosIcon />} />
-          <NavItem label="Settings" icon={<SettingsIcon />} />
+        <nav className="bottom-nav" aria-label="Основная навигация">
+          <NavItem label="Главная" icon={<DashboardIcon />} active />
+          <NavItem label="Управление" icon={<ControlIcon />} />
+          <NavItem label="Файлы" icon={<FilesIcon />} />
+          <NavItem label="Макросы" icon={<MacrosIcon />} />
+          <NavItem label="Настройки" icon={<SettingsIcon />} />
         </nav>
       </section>
     </main>
@@ -381,5 +468,6 @@ function App() {
 }
 
 export default App
+
 
 

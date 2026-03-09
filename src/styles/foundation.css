@@ -36,7 +36,23 @@
   --grid-portrait-gutter: 16px;
   --grid-portrait-margin: 20px;
 
+  /* spacing scale */
+  --space-micro: 2px;
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 20px;
+
   /* device contract */
   --screen-width: 960px;
   --screen-height: 544px;
+
+  /* block layout rule */
+  --layout-block-padding-y: var(--space-md);
+  --layout-block-padding-x: var(--space-md);
+  --layout-block-content-align: center;
+  --layout-block-label-size: 16px;
+  --layout-block-value-size: 22px;
+  --layout-block-unit-size: 16px;
 }
