@@ -417,10 +417,12 @@ function App() {
               </article>
 
               <aside className="zoffset-card">
-                <p className="label">Z-offset</p>
-                <p className="value zoffset-value">
-                  {Z_OFFSET_MM.toFixed(2)}<span>мм</span>
-                </p>
+                <div className="zoffset-head">
+                  <p className="label">Z-offset</p>
+                  <p className="value zoffset-value">
+                    {Z_OFFSET_MM.toFixed(2)}<span>мм</span>
+                  </p>
+                </div>
                 <div className="step-selector" role="group" aria-label="шаг babystep">
                   {BABYSTEP_STEP_OPTIONS.map((step) => (
                     <button
@@ -468,6 +470,5 @@ function App() {
 }
 
 export default App
-
 
 
