@@ -1,0 +1,15 @@
+﻿{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Chrome 960x544 (mock)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:5173",
+      "webRoot": "${workspaceFolder}",
+      "runtimeArgs": [
+        "--window-size=960,544"
+      ]
+    }
+  ]
+}
