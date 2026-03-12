@@ -2,10 +2,6 @@
 import App from './App'
 
 describe('App', () => {
-  afterEach(() => {
-    window.history.replaceState({}, '', '/')
-  })
-
   it('renders layout according to landscape dashboard frame', async () => {
     render(<App />)
 
@@ -47,14 +43,6 @@ describe('App', () => {
     })
   })
 
-  it('enables one-to-one preview mode via query flag', () => {
-    window.history.replaceState({}, '', '/?view=1x1')
-    render(<App />)
-
-    const shell = screen.getByTestId('screen-shell')
-    expect(shell.closest('main')).toHaveClass('is-one-to-one')
-  })
-
   it('switches between screens from bottom navigation', () => {
     render(<App />)
 
@@ -62,7 +50,6 @@ describe('App', () => {
 
     expect(screen.getByTestId('screen-files')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Файлы' })).toBeInTheDocument()
-    expect(window.location.search).toContain('screen=files')
   })
 
   it('opens Wi-Fi popup with network details and navigates to settings', () => {

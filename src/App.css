@@ -12,20 +12,11 @@ body {
 }
 
 .app-root {
-  --preview-zoom: 1;
   min-height: 100vh;
   background: var(--color-window-background);
   display: grid;
   place-items: center;
   padding: var(--grid-safe-area);
-}
-
-.app-root.is-one-to-one {
-  width: calc(var(--screen-width) * var(--preview-zoom));
-  height: calc(var(--screen-height) * var(--preview-zoom));
-  min-height: auto;
-  padding: 0;
-  place-items: start;
 }
 
 .screen-shell {
@@ -38,19 +29,6 @@ body {
   overflow: hidden;
   display: grid;
   grid-template-rows: 64px 1fr 84px;
-}
-
-.app-root.is-one-to-one .screen-shell {
-  zoom: var(--preview-zoom);
-  border: none;
-  border-radius: 0;
-}
-
-@supports not (zoom: 1) {
-  .app-root.is-one-to-one .screen-shell {
-    transform: scale(var(--preview-zoom));
-    transform-origin: top left;
-  }
 }
 
 .top-bar {

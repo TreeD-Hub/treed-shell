@@ -11,9 +11,9 @@ Playwright-тесты оболочки.
 Команда запуска:
 
 ```bash
-npm run test:visual
-npm run test:visual:layout
+npx playwright test
+npx playwright test e2e/shell-layout.spec.ts
 ```
 
 Артефакт скрина:
-- файл `dashboard-shell.png` сохраняется в `test-results/**` на каждом прогоне `test:visual:layout`.
+- файл `dashboard-shell.png` сохраняется в `test-results/**` на каждом прогоне `npx playwright test e2e/shell-layout.spec.ts`.

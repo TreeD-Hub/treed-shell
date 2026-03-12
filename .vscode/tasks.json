@@ -2,44 +2,14 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "dev:mock",
-      "type": "shell",
-      "command": "npm run dev:mock"
-    },
-    {
-      "label": "dev:live",
-      "type": "shell",
-      "command": "npm run dev:live"
-    },
-    {
-      "label": "preview:960",
-      "type": "shell",
-      "command": "npm run preview:960"
-    },
-    {
-      "label": "lint",
-      "type": "shell",
-      "command": "npm run lint"
-    },
-    {
-      "label": "typecheck",
-      "type": "shell",
-      "command": "npm run typecheck"
-    },
-    {
-      "label": "test",
-      "type": "shell",
-      "command": "npm run test"
-    },
-    {
-      "label": "test:visual",
-      "type": "shell",
-      "command": "npm run test:visual"
-    },
-    {
       "label": "tauri:dev",
       "type": "shell",
       "command": "npm run tauri:dev"
+    },
+    {
+      "label": "tauri:build",
+      "type": "shell",
+      "command": "npm run tauri:build"
     }
   ]
 }

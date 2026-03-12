@@ -13,9 +13,7 @@ import {
   type TopStatusButtonId,
 } from './dashboard/config'
 import {
-  calculatePreviewZoom,
   clampPercent,
-  resolvePreviewSettings,
   rounded,
   statusLabel,
 } from './dashboard/helpers'
@@ -29,7 +27,6 @@ import {
 } from './ui'
 import './App.css'
 
-const SCREEN_QUERY_KEY = 'screen'
 const DEFAULT_SCREEN: ScreenId = 'dashboard'
 const CLOUD_LINK_URL = 'https://treed.pro'
 const CLOUD_QR_IMAGE_URL = 'https://api.qrserver.com/v1/create-qr-code/?size=144x144&data=https%3A%2F%2Ftreed.pro'
@@ -83,35 +80,6 @@ const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard'>, { title: strin
   },
 }
 
-function resolveScreenFromSearch(search: string): ScreenId {
-  const value = (new URLSearchParams(search).get(SCREEN_QUERY_KEY) ?? '').toLowerCase()
-  if (BOTTOM_NAV_ITEMS.some((item) => item.id === value)) {
-    return value as ScreenId
-  }
-  return DEFAULT_SCREEN
-}
-
-function syncScreenToUrl(screen: ScreenId): void {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  const params = new URLSearchParams(window.location.search)
-  if (screen === DEFAULT_SCREEN) {
-    params.delete(SCREEN_QUERY_KEY)
-  } else {
-    params.set(SCREEN_QUERY_KEY, screen)
-  }
-
-  const search = params.toString()
-  const nextUrl = `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`
-  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`
-
-  if (nextUrl !== currentUrl) {
-    window.history.replaceState(window.history.state, '', nextUrl)
-  }
-}
-
 function App() {
   const { snapshot, refresh } = usePrinterSnapshot()
   const { pendingCommand, executeCommand } = usePrinterCommands()
@@ -126,25 +94,7 @@ function App() {
   const [activeTopPopup, setActiveTopPopup] = useState<TopStatusButtonId | null>(null)
   const [powerPopupNotice, setPowerPopupNotice] = useState<string>('')
   const [topPopupPosition, setTopPopupPosition] = useState<TopPopupPosition | null>(null)
-  const [activeScreen, setActiveScreen] = useState<ScreenId>(() =>
-    resolveScreenFromSearch(typeof window === 'undefined' ? '' : window.location.search),
-  )
-  const previewSettings = useMemo(
-    () => resolvePreviewSettings(typeof window === 'undefined' ? '' : window.location.search),
-    [],
-  )
-  const hasPreviewScale = previewSettings.mode !== 'none'
-  const previewZoom = useMemo(
-    () =>
-      calculatePreviewZoom(
-        previewSettings,
-        typeof window === 'undefined' ? 1 : (window.devicePixelRatio ?? 1),
-      ),
-    [previewSettings],
-  )
-  const previewStyle: CSSProperties | undefined = hasPreviewScale
-    ? ({ '--preview-zoom': String(previewZoom) } as CSSProperties)
-    : undefined
+  const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
 
   const printFill = Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
   const isBusy = pendingCommand !== null
@@ -201,25 +151,6 @@ function App() {
     ...definition,
     value: processMetricValueByKey[definition.key],
   }))
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    const handlePopstate = () => {
-      setActiveScreen(resolveScreenFromSearch(window.location.search))
-    }
-
-    window.addEventListener('popstate', handlePopstate)
-    return () => {
-      window.removeEventListener('popstate', handlePopstate)
-    }
-  }, [])
-
-  useEffect(() => {
-    syncScreenToUrl(activeScreen)
-  }, [activeScreen])
 
   const closeTopPopup = useCallback(() => {
     setActiveTopPopup(null)
@@ -318,7 +249,7 @@ function App() {
   }
 
   return (
-    <main className={`app-root ${hasPreviewScale ? 'is-one-to-one' : ''}`} style={previewStyle}>
+    <main className="app-root">
       <section className="screen-shell" data-testid="screen-shell" ref={screenShellRef}>
         <header className="top-bar">
           <div className="brand-wrap">
