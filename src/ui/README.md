@@ -7,6 +7,7 @@
 - `IconMask.tsx` — базовый рендер иконки через mask/currentColor;
 - `buttons.tsx` — типовые кнопки (`StatusIconButton`, `ActionSquareButton`, `NavItemButton`);
 - `metrics.tsx` — типовые виджеты метрик (`TemperatureMetric`, `PlainMetric`);
+- `printFileCard.tsx` — типовая карточка файла печати для библиотечных и файловых экранов;
 - `PrintPreviewIcon.tsx` — фирменная иконка превью модели.
 
 Правила:

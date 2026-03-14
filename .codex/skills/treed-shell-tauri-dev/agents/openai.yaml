@@ -1,0 +1,4 @@
+interface:
+  display_name: "Treed Tauri Dev"
+  short_description: "Быстрый и аккуратный запуск tauri:dev в treed-shell на Windows"
+  default_prompt: "Запусти или проверь tauri:dev для treed-shell с минимальным шумом и коротким статусом"

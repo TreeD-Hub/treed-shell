@@ -50,6 +50,23 @@ describe('App', () => {
 
     expect(screen.getByTestId('screen-files')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Файлы' })).toBeInTheDocument()
+    expect(screen.getByText('Прокрутите вниз, чтобы найти нужную модель.')).toBeInTheDocument()
+    expect(screen.queryByText(/Экран файлов подключен в каркас маршрутизации/i)).not.toBeInTheDocument()
+    expect(screen.getAllByTestId('print-file-card')).toHaveLength(12)
+
+    const sortByNameButton = screen.getByRole('button', { name: 'По имени' })
+    const sortByAddedAtButton = screen.getByRole('button', { name: 'По добавлению' })
+
+    expect(sortByNameButton).toHaveAttribute('aria-pressed', 'true')
+    expect(sortByAddedAtButton).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getAllByTestId('print-file-card')[0]).toHaveTextContent('bearing_bracket_mk2.gcode')
+
+    fireEvent.click(sortByAddedAtButton)
+
+    expect(sortByAddedAtButton).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByTestId('print-file-card')[0]).toHaveTextContent('fan_shroud_prototype.gcode')
+    expect(screen.getByText('2 ч 15 мин')).toBeInTheDocument()
+    expect(screen.getByText('34 г')).toBeInTheDocument()
   })
 
   it('opens Wi-Fi popup with network details and navigates to settings', () => {

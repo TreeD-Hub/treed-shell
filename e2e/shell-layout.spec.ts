@@ -116,3 +116,85 @@ test('captures screenshot and validates layout geometry', async ({ page }, testI
     contentType: 'image/png',
   })
 })
+
+test('files screen keeps four cards per row and scrolls vertically', async ({ page }, testInfo) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Файлы' }).click()
+
+  const filesScreen = page.getByTestId('screen-files')
+  const scrollArea = page.getByTestId('files-scroll-area')
+  const fileCards = page.getByTestId('print-file-card')
+  const filesHead = page.locator('.files-screen-head')
+  const sortByNameButton = page.getByTestId('files-sort-name')
+  const sortByAddedAtButton = page.getByTestId('files-sort-addedAt')
+
+  await expect(filesScreen).toBeVisible()
+  await expect(fileCards).toHaveCount(12)
+  await expect(sortByNameButton).toHaveAttribute('aria-pressed', 'true')
+  await expect(fileCards.nth(0)).toContainText('bearing_bracket_mk2.gcode')
+
+  await sortByAddedAtButton.click()
+
+  await expect(sortByAddedAtButton).toHaveAttribute('aria-pressed', 'true')
+  await expect(fileCards.nth(0)).toContainText('fan_shroud_prototype.gcode')
+
+  const [scrollRectRaw, headRaw, firstRaw, secondRaw, thirdRaw, fourthRaw, fifthRaw, lastRaw] = await Promise.all([
+    scrollArea.boundingBox(),
+    filesHead.boundingBox(),
+    fileCards.nth(0).boundingBox(),
+    fileCards.nth(1).boundingBox(),
+    fileCards.nth(2).boundingBox(),
+    fileCards.nth(3).boundingBox(),
+    fileCards.nth(4).boundingBox(),
+    fileCards.nth(11).boundingBox(),
+  ])
+
+  const scrollRect = requireRect(scrollRectRaw, 'files-scroll-area')
+  const headRect = requireRect(headRaw, 'files-screen-head')
+  const firstRect = requireRect(firstRaw, 'file-card-1')
+  const secondRect = requireRect(secondRaw, 'file-card-2')
+  const thirdRect = requireRect(thirdRaw, 'file-card-3')
+  const fourthRect = requireRect(fourthRaw, 'file-card-4')
+  const fifthRect = requireRect(fifthRaw, 'file-card-5')
+  const lastRectBeforeScroll = requireRect(lastRaw, 'file-card-12 before scroll')
+
+  expect(Math.abs(firstRect.y - secondRect.y)).toBeLessThanOrEqual(2)
+  expect(Math.abs(firstRect.y - thirdRect.y)).toBeLessThanOrEqual(2)
+  expect(Math.abs(firstRect.y - fourthRect.y)).toBeLessThanOrEqual(2)
+  expect(secondRect.x).toBeGreaterThan(firstRect.x)
+  expect(thirdRect.x).toBeGreaterThan(secondRect.x)
+  expect(fourthRect.x).toBeGreaterThan(thirdRect.x)
+  expect(fifthRect.y).toBeGreaterThan(firstRect.y + 20)
+  expect(lastRectBeforeScroll.y).toBeGreaterThan(scrollRect.y + scrollRect.height)
+
+  const scrollMetrics = await scrollArea.evaluate((node) => ({
+    scrollTop: node.scrollTop,
+    clientHeight: node.clientHeight,
+    scrollHeight: node.scrollHeight,
+  }))
+
+  expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight)
+
+  const screenshotPath = testInfo.outputPath('files-library.png')
+  await filesScreen.screenshot({ path: screenshotPath, animations: 'disabled' })
+  await testInfo.attach('files-library', {
+    path: screenshotPath,
+    contentType: 'image/png',
+  })
+
+  await scrollArea.evaluate((node) => {
+    node.scrollTop = 120
+  })
+
+  const headRectAfterScroll = await filesHead.boundingBox()
+  if (headRectAfterScroll !== null) {
+    expect(headRectAfterScroll.y).toBeLessThan(headRect.y - 20)
+  }
+
+  await scrollArea.evaluate((node) => {
+    node.scrollTop = node.scrollHeight
+  })
+
+  const lastRectAfterScroll = requireRect(await fileCards.nth(11).boundingBox(), 'file-card-12 after scroll')
+  expect(lastRectAfterScroll.y + lastRectAfterScroll.height).toBeLessThanOrEqual(scrollRect.y + scrollRect.height + 2)
+})

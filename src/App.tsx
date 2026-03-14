@@ -21,10 +21,12 @@ import {
   ActionSquareButton,
   NavItemButton,
   PlainMetric,
+  PrintFileCard,
   PrintPreviewIcon,
   StatusIconButton,
   TemperatureMetric,
 } from './ui'
+import { PRINT_FILE_LIBRARY } from './printFiles'
 import './App.css'
 
 const DEFAULT_SCREEN: ScreenId = 'dashboard'
@@ -38,6 +40,7 @@ const FALLBACK_SCREEN_WIDTH = 960
 const TOP_BAR_BUTTON_SIZE = 56
 const TOP_BAR_BUTTON_GAP = 8
 const TOP_BAR_RIGHT_PADDING = 24
+type FilesSortKey = 'name' | 'addedAt'
 const TOP_BAR_POPUP_TITLES: Record<TopStatusButtonId, string> = {
   wifi: 'Состояние Wi-Fi',
   cloud: 'Состояние облака',
@@ -50,6 +53,11 @@ type TopPopupPosition = {
   arrowLeft: number
 }
 
+const FILES_SORT_OPTIONS: Array<{ id: FilesSortKey; label: string }> = [
+  { id: 'name', label: 'По имени' },
+  { id: 'addedAt', label: 'По добавлению' },
+]
+
 function resolveFallbackAnchorCenterX(id: TopStatusButtonId, screenWidth: number): number {
   const buttonIndex = TOP_STATUS_BUTTONS.findIndex((item) => item.id === id)
   const buttonsFromRight = TOP_STATUS_BUTTONS.length - 1 - Math.max(0, buttonIndex)
@@ -61,14 +69,10 @@ function resolveFallbackAnchorCenterX(id: TopStatusButtonId, screenWidth: number
   )
 }
 
-const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard'>, { title: string; description: string }> = {
+const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard' | 'files'>, { title: string; description: string }> = {
   control: {
     title: 'Управление',
     description: 'Раздел управления принтером подключен в навигацию и готов к наполнению рабочими блоками.',
-  },
-  files: {
-    title: 'Файлы',
-    description: 'Экран файлов подключен в каркас маршрутизации. Здесь будет список G-code и операции запуска печати.',
   },
   macros: {
     title: 'Макросы',
@@ -95,9 +99,11 @@ function App() {
   const [powerPopupNotice, setPowerPopupNotice] = useState<string>('')
   const [topPopupPosition, setTopPopupPosition] = useState<TopPopupPosition | null>(null)
   const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
+  const [filesSortKey, setFilesSortKey] = useState<FilesSortKey>('name')
 
   const printFill = Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
   const isBusy = pendingCommand !== null
+  const isFilesScreenActive = activeScreen === 'files'
   const activeNavIndex = Math.max(
     0,
     BOTTOM_NAV_ITEMS.findIndex((item) => item.id === activeScreen),
@@ -113,6 +119,17 @@ function App() {
   const wifiSsidLabel = snapshot.connection === 'online' ? snapshot.wifiSsid : 'Не подключено'
   const wifiIpLabel = snapshot.connection === 'online' ? snapshot.ipAddress : '—'
   const cloudStatusLabel = snapshot.connection === 'online' ? 'В сети' : 'Не в сети'
+  const sortedPrintFiles = useMemo(() => {
+    const nextItems = [...PRINT_FILE_LIBRARY]
+
+    if (filesSortKey === 'addedAt') {
+      nextItems.sort((left, right) => Date.parse(right.addedAt) - Date.parse(left.addedAt))
+      return nextItems
+    }
+
+    nextItems.sort((left, right) => left.name.localeCompare(right.name, 'en'))
+    return nextItems
+  }, [filesSortKey])
 
   const temperatureValueByKey = {
     nozzle: snapshot.extruderTemp,
@@ -203,6 +220,14 @@ function App() {
     closeTopPopup()
   }, [closeTopPopup])
 
+  function handleFilesSortChange(nextSortKey: FilesSortKey): void {
+    if (nextSortKey === filesSortKey) {
+      return
+    }
+
+    setFilesSortKey(nextSortKey)
+  }
+
   useEffect(() => {
     if (activeTopPopup === null || typeof window === 'undefined') {
       return
@@ -274,7 +299,7 @@ function App() {
           </div>
         </header>
 
-        <div className="content-grid">
+        <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''}`}>
           {activeScreen === 'dashboard' ? (
             <>
               <section className="job-card">
@@ -416,6 +441,43 @@ function App() {
                 </div>
               </section>
             </>
+          ) : isFilesScreenActive ? (
+            <section className="files-screen" data-testid="screen-files">
+              <div className="files-scroll-area" data-testid="files-scroll-area">
+                <header className="files-screen-head">
+                  <div className="files-screen-copy">
+                    <h2 className="files-screen-title">Файлы</h2>
+                    <p className="files-screen-note">Прокрутите вниз, чтобы найти нужную модель.</p>
+                  </div>
+                  <div className="files-sort-group" role="group" aria-label="Сортировка файлов">
+                    <span className="files-sort-indicator" aria-hidden="true" />
+                    {FILES_SORT_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`files-sort-btn ${filesSortKey === option.id ? 'is-active' : ''}`}
+                        aria-pressed={filesSortKey === option.id}
+                        data-testid={`files-sort-${option.id}`}
+                        onClick={() => handleFilesSortChange(option.id)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </header>
+
+                <div className="files-grid" data-testid="file-card-grid">
+                  {sortedPrintFiles.map((item) => (
+                    <PrintFileCard
+                      key={item.id}
+                      name={item.name}
+                      printTime={item.printTime}
+                      weight={item.weight}
+                    />
+                  ))}
+                </div>
+              </div>
+            </section>
           ) : (
             <section className="screen-placeholder" data-testid={`screen-${activeScreen}`}>
               <h2 className="screen-placeholder-title">{SCREEN_PLACEHOLDERS[activeScreen].title}</h2>
