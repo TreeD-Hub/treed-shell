@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { dataMode } from '../../config'
 import { createMockClient } from '../transport/mockClient'
 import { createMoonrakerClient } from '../transport/moonrakerClient'
@@ -10,6 +10,9 @@ const FALLBACK_SNAPSHOT: PrinterSnapshot = {
   wifiSsid: 'Не подключено',
   ipAddress: '—',
   state: 'unknown',
+  toolheadX: 0,
+  toolheadY: 0,
+  toolheadZ: 0,
   extruderTemp: 0,
   bedTemp: 0,
   modelFanPercent: 0,

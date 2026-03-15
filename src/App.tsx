@@ -19,12 +19,19 @@ import {
 } from './dashboard/helpers'
 import {
   ActionSquareButton,
+  AxisCrossControls,
+  HorizontalSteppedSlider,
   NavItemButton,
   PlainMetric,
   PrintFileCard,
   PrintPreviewIcon,
+  SegmentedToggle,
   StatusIconButton,
   TemperatureMetric,
+  type AxisId,
+  type JoystickVector,
+  VerticalAxisSlider,
+  VirtualJoystick,
 } from './ui'
 import { PRINT_FILE_LIBRARY, type PrintFileItem } from './printFiles'
 import './App.css'
@@ -42,6 +49,14 @@ const TOP_BAR_BUTTON_GAP = 8
 const TOP_BAR_RIGHT_PADDING = 24
 const FILE_MODAL_TITLE_ID = 'print-file-modal-title'
 type FilesSortKey = 'name' | 'addedAt'
+type ParkingMode = 'all' | 'axis'
+type MovementMode = 'buttons' | 'joystick'
+type MoveStepKey = '1' | '10' | '25' | '100'
+type PrintHeadPosition = {
+  x: number
+  y: number
+  z: number
+}
 const TOP_BAR_POPUP_TITLES: Record<TopStatusButtonId, string> = {
   wifi: 'Состояние Wi-Fi',
   cloud: 'Состояние облака',
@@ -58,6 +73,54 @@ const FILES_SORT_OPTIONS: Array<{ id: FilesSortKey; label: string }> = [
   { id: 'name', label: 'По имени' },
   { id: 'addedAt', label: 'По добавлению' },
 ]
+const PARKING_MODE_OPTIONS: Array<{ id: ParkingMode; label: string }> = [
+  { id: 'all', label: 'Все оси' },
+  { id: 'axis', label: 'По оси' },
+]
+const PARKING_AXIS_OPTIONS: Array<{ id: AxisId; label: string }> = [
+  { id: 'X', label: 'X' },
+  { id: 'Y', label: 'Y' },
+  { id: 'Z', label: 'Z' },
+]
+const MOVEMENT_MODE_OPTIONS: Array<{ id: MovementMode; label: string }> = [
+  { id: 'buttons', label: 'Крестовина' },
+  { id: 'joystick', label: 'Джойстик' },
+]
+const MOVE_STEP_OPTIONS: Array<{ id: MoveStepKey; label: string; valueMm: number }> = [
+  { id: '1', label: '1 мм', valueMm: 1 },
+  { id: '10', label: '10 мм', valueMm: 10 },
+  { id: '25', label: '25 мм', valueMm: 25 },
+  { id: '100', label: '100 мм', valueMm: 100 },
+]
+const HEAD_X_BOUNDS_MM = { min: 0, max: 250 } as const
+const HEAD_Y_BOUNDS_MM = { min: 0, max: 250 } as const
+const HEAD_Z_BOUNDS_MM = { min: 0, max: 200 } as const
+const MODEL_FAN_BOUNDS_PERCENT = { min: 0, max: 100 } as const
+const MODEL_FAN_STEP_PERCENT = 5
+const MAX_JOYSTICK_SPEED_MM_S = 50
+
+function clampAxisValue(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function snapValueByStep(value: number, min: number, max: number, step: number): number {
+  const safeStep = Math.max(1, step)
+  const clamped = clampAxisValue(value, min, max)
+  const steps = Math.round((clamped - min) / safeStep)
+  return clampAxisValue(min + (steps * safeStep), min, max)
+}
+
+function normalizeHeadPosition(position: PrintHeadPosition): PrintHeadPosition {
+  return {
+    x: clampAxisValue(position.x, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max),
+    y: clampAxisValue(position.y, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max),
+    z: clampAxisValue(position.z, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max),
+  }
+}
+
+function formatAxisCoordinate(value: number): string {
+  return value.toFixed(1)
+}
 
 function resolveFallbackAnchorCenterX(id: TopStatusButtonId, screenWidth: number): number {
   const buttonIndex = TOP_STATUS_BUTTONS.findIndex((item) => item.id === id)
@@ -103,6 +166,22 @@ function App() {
   const [filesSortKey, setFilesSortKey] = useState<FilesSortKey>('name')
   const [filesLibrary, setFilesLibrary] = useState<PrintFileItem[]>(() => [...PRINT_FILE_LIBRARY])
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
+  const [parkingMode, setParkingMode] = useState<ParkingMode>('all')
+  const [parkingAxis, setParkingAxis] = useState<AxisId>('X')
+  const [movementMode, setMovementMode] = useState<MovementMode>('buttons')
+  const [moveStepKey, setMoveStepKey] = useState<MoveStepKey>('1')
+  const [isServiceModeEnabled, setIsServiceModeEnabled] = useState<boolean>(false)
+  const [modelFanPercent, setModelFanPercent] = useState<number>(() => (
+    snapValueByStep(snapshot.modelFanPercent, MODEL_FAN_BOUNDS_PERCENT.min, MODEL_FAN_BOUNDS_PERCENT.max, MODEL_FAN_STEP_PERCENT)
+  ))
+  const [joystickVector, setJoystickVector] = useState<JoystickVector>({ x: 0, y: 0 })
+  const [printHeadPosition, setPrintHeadPosition] = useState<PrintHeadPosition>(() =>
+    normalizeHeadPosition({
+      x: snapshot.toolheadX,
+      y: snapshot.toolheadY,
+      z: snapshot.toolheadZ,
+    }),
+  )
 
   const printFill = Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
   const isBusy = pendingCommand !== null
@@ -126,6 +205,13 @@ function App() {
   const wifiSsidLabel = snapshot.connection === 'online' ? snapshot.wifiSsid : 'Не подключено'
   const wifiIpLabel = snapshot.connection === 'online' ? snapshot.ipAddress : '—'
   const cloudStatusLabel = snapshot.connection === 'online' ? 'В сети' : 'Не в сети'
+  const topBarScreenLabel = useMemo(() => {
+    if (activeScreen === 'dashboard') {
+      return statusLabel(snapshot.state)
+    }
+
+    return BOTTOM_NAV_ITEMS.find((item) => item.id === activeScreen)?.label ?? statusLabel(snapshot.state)
+  }, [activeScreen, snapshot.state])
   const sortedPrintFiles = useMemo(() => {
     const nextItems = [...filesLibrary]
 
@@ -144,6 +230,15 @@ function App() {
 
     return filesLibrary.find((item) => item.id === selectedFileId) ?? null
   }, [filesLibrary, selectedFileId])
+  const moveStepMm = useMemo(() => {
+    const selectedStep = MOVE_STEP_OPTIONS.find((item) => item.id === moveStepKey)
+    return selectedStep?.valueMm ?? 1
+  }, [moveStepKey])
+  const joystickSpeedMmS = useMemo(
+    () => Math.hypot(joystickVector.x, joystickVector.y) * MAX_JOYSTICK_SPEED_MM_S,
+    [joystickVector.x, joystickVector.y],
+  )
+  const axisCoordinatesLabel = `X ${formatAxisCoordinate(printHeadPosition.x)}  Y ${formatAxisCoordinate(printHeadPosition.y)}  Z ${formatAxisCoordinate(printHeadPosition.z)}`
 
   const temperatureValueByKey = {
     nozzle: snapshot.extruderTemp,
@@ -242,6 +337,28 @@ function App() {
     setFilesSortKey(nextSortKey)
   }
 
+  function handleParkingModeChange(nextMode: ParkingMode): void {
+    setParkingMode(nextMode)
+  }
+
+  function handleParkingAxisChange(nextAxis: AxisId): void {
+    setParkingAxis(nextAxis)
+  }
+
+  function handleMoveStepChange(nextStep: MoveStepKey): void {
+    setMoveStepKey(nextStep)
+  }
+
+  function handleMovementModeChange(nextMode: MovementMode): void {
+    setMovementMode(nextMode)
+  }
+
+  function handleModelFanPercentChange(nextValue: number): void {
+    setModelFanPercent(
+      snapValueByStep(nextValue, MODEL_FAN_BOUNDS_PERCENT.min, MODEL_FAN_BOUNDS_PERCENT.max, MODEL_FAN_STEP_PERCENT),
+    )
+  }
+
   const closeFileModal = useCallback(() => {
     setSelectedFileId(null)
   }, [])
@@ -272,6 +389,67 @@ function App() {
       await refresh()
       closeFileModal()
     }
+  }
+
+  async function handleParkingCommand(): Promise<void> {
+    const ok = await executeCommand({ command: 'home' })
+    if (!ok) {
+      return
+    }
+
+    await refresh()
+    setPrintHeadPosition((prevPosition) => {
+      if (parkingMode === 'all') {
+        return { ...prevPosition, x: 0, y: 0, z: 0 }
+      }
+
+      if (parkingAxis === 'X') {
+        return { ...prevPosition, x: 0 }
+      }
+
+      if (parkingAxis === 'Y') {
+        return { ...prevPosition, y: 0 }
+      }
+
+      return { ...prevPosition, z: 0 }
+    })
+  }
+
+  function handleServiceModeToggle(): void {
+    setIsServiceModeEnabled((prevValue) => !prevValue)
+  }
+
+  function handleAxisMove(axis: AxisId, direction: -1 | 1): void {
+    setPrintHeadPosition((prevPosition) => {
+      const delta = direction * moveStepMm
+      return {
+        ...prevPosition,
+        x: axis === 'X'
+          ? clampAxisValue(prevPosition.x + delta, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max)
+          : prevPosition.x,
+        y: axis === 'Y'
+          ? clampAxisValue(prevPosition.y + delta, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max)
+          : prevPosition.y,
+        z: axis === 'Z'
+          ? clampAxisValue(prevPosition.z + delta, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max)
+          : prevPosition.z,
+      }
+    })
+  }
+
+  function handleJoystickVectorChange(nextVector: JoystickVector): void {
+    setJoystickVector(nextVector)
+  }
+
+  function handleJoystickZChange(nextValue: number): void {
+    setPrintHeadPosition((prevPosition) => ({
+      ...prevPosition,
+      z: clampAxisValue(nextValue, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max),
+    }))
+  }
+
+  function handleMotorsDisable(): void {
+    // Команда отключения моторов будет подключена после интеграции backend.
   }
 
   useEffect(() => {
@@ -320,6 +498,71 @@ function App() {
     }
   }, [activeScreen, closeFileModal, selectedFileId])
 
+  useEffect(() => {
+    if (movementMode !== 'joystick' && (joystickVector.x !== 0 || joystickVector.y !== 0)) {
+      setJoystickVector({ x: 0, y: 0 })
+    }
+  }, [joystickVector.x, joystickVector.y, movementMode])
+
+  useEffect(() => {
+    setModelFanPercent((currentValue) => {
+      const nextValue = snapValueByStep(
+        snapshot.modelFanPercent,
+        MODEL_FAN_BOUNDS_PERCENT.min,
+        MODEL_FAN_BOUNDS_PERCENT.max,
+        MODEL_FAN_STEP_PERCENT,
+      )
+
+      return currentValue === nextValue ? currentValue : nextValue
+    })
+  }, [snapshot.modelFanPercent])
+
+  useEffect(() => {
+    if (movementMode === 'joystick') {
+      return
+    }
+
+    setPrintHeadPosition(
+      normalizeHeadPosition({
+        x: snapshot.toolheadX,
+        y: snapshot.toolheadY,
+        z: snapshot.toolheadZ,
+      }),
+    )
+  }, [movementMode, snapshot.toolheadX, snapshot.toolheadY, snapshot.toolheadZ])
+
+  useEffect(() => {
+    if (movementMode !== 'joystick' || (joystickVector.x === 0 && joystickVector.y === 0)) {
+      return
+    }
+
+    let frameHandle: number | null = null
+    let previousTimestamp: number | null = null
+
+    const tick = (timestamp: number) => {
+      if (previousTimestamp === null) {
+        previousTimestamp = timestamp
+      }
+      const deltaSeconds = clampAxisValue((timestamp - previousTimestamp) / 1000, 0, 0.1)
+      previousTimestamp = timestamp
+
+      setPrintHeadPosition((prevPosition) => normalizeHeadPosition({
+        x: prevPosition.x + (joystickVector.x * MAX_JOYSTICK_SPEED_MM_S * deltaSeconds),
+        y: prevPosition.y + (joystickVector.y * MAX_JOYSTICK_SPEED_MM_S * deltaSeconds),
+        z: prevPosition.z,
+      }))
+
+      frameHandle = window.requestAnimationFrame(tick)
+    }
+
+    frameHandle = window.requestAnimationFrame(tick)
+    return () => {
+      if (frameHandle !== null) {
+        window.cancelAnimationFrame(frameHandle)
+      }
+    }
+  }, [joystickVector.x, joystickVector.y, movementMode])
+
   function setTopButtonRef(id: TopStatusButtonId, node: HTMLButtonElement | null): void {
     topButtonRefs.current[id] = node
   }
@@ -348,7 +591,7 @@ function App() {
         <header className="top-bar">
           <div className="brand-wrap">
             <h1>TreeD Принтер</h1>
-            <span className="print-state">{statusLabel(snapshot.state)}</span>
+            <span className="print-state" data-testid="top-bar-screen-label">{topBarScreenLabel}</span>
           </div>
           <div className="top-icons" aria-label="иконки статуса">
             {TOP_STATUS_BUTTONS.map((item) => (
@@ -517,7 +760,6 @@ function App() {
               <div className="files-scroll-area" data-testid="files-scroll-area">
                 <header className="files-screen-head">
                   <div className="files-screen-copy">
-                    <h2 className="files-screen-title">Файлы</h2>
                     <p className="files-screen-note">Прокрутите вниз, чтобы найти нужную модель.</p>
                   </div>
                   <div className="files-sort-group" role="group" aria-label="Сортировка файлов">
@@ -554,9 +796,166 @@ function App() {
                 </div>
               </div>
             </section>
+          ) : activeScreen === 'control' ? (
+            <section className="control-screen" data-testid="screen-control">
+              <div className="control-scroll-area">
+                <header className="control-screen-head">
+                  <p className="control-screen-note">Парковка, сервисный режим и ручное перемещение осей.</p>
+                </header>
+
+                <div className="control-grid">
+                  <div className="control-side-stack">
+                    <div className="control-side-top">
+                      <article className="control-card control-card-parking">
+                        <h3 className="control-card-title">Парковка</h3>
+                        <SegmentedToggle
+                          options={PARKING_MODE_OPTIONS}
+                          value={parkingMode}
+                          onChange={handleParkingModeChange}
+                          ariaLabel="Режим парковки"
+                          testIdPrefix="parking-mode"
+                        />
+                        {parkingMode === 'axis' ? (
+                          <SegmentedToggle
+                            options={PARKING_AXIS_OPTIONS}
+                            value={parkingAxis}
+                            onChange={handleParkingAxisChange}
+                            ariaLabel="Выбор оси парковки"
+                            testIdPrefix="parking-axis"
+                          />
+                        ) : null}
+                        <button
+                          type="button"
+                          className="control-action-btn"
+                          data-testid="parking-action-button"
+                          onClick={() => void handleParkingCommand()}
+                          disabled={isBusy}
+                        >
+                          {pendingCommand === 'home'
+                            ? 'Парковка...'
+                            : parkingMode === 'all'
+                              ? 'Парковка по всем осям'
+                              : `Парковка оси ${parkingAxis}`}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="control-action-btn control-action-btn-danger"
+                          data-testid="motors-disable-button"
+                          onClick={handleMotorsDisable}
+                          disabled={isBusy}
+                        >
+                          Отключить моторы
+                        </button>
+                      </article>
+
+                      <article className="control-card control-card-service">
+                        <h3 className="control-card-title">Сервисный режим</h3>
+                        <p className="control-status-row">
+                          <span>Статус</span>
+                          <strong>{isServiceModeEnabled ? 'Включен' : 'Выключен'}</strong>
+                        </p>
+                        <button
+                          type="button"
+                          className="control-service-btn"
+                          data-testid="service-mode-button"
+                          aria-pressed={isServiceModeEnabled}
+                          onClick={handleServiceModeToggle}
+                        >
+                          {isServiceModeEnabled ? 'Выключить сервисный режим' : 'Включить сервисный режим'}
+                        </button>
+                        <p className="control-card-hint">Используйте только во время обслуживания принтера.</p>
+                      </article>
+                    </div>
+
+                    <article className="control-card control-card-fan">
+                      <h3 className="control-card-title">Управление обдувом</h3>
+                      <p className="control-status-row">
+                        <span>Обдув модели</span>
+                        <strong>{modelFanPercent}%</strong>
+                      </p>
+                      <HorizontalSteppedSlider
+                        value={modelFanPercent}
+                        min={MODEL_FAN_BOUNDS_PERCENT.min}
+                        max={MODEL_FAN_BOUNDS_PERCENT.max}
+                        step={MODEL_FAN_STEP_PERCENT}
+                        onChange={handleModelFanPercentChange}
+                        disabled={isBusy}
+                        testId="model-fan-slider"
+                      />
+                    </article>
+                  </div>
+
+                  <article className="control-card control-card-motion">
+                    <h3 className="control-card-title">Перемещение по осям</h3>
+                    <SegmentedToggle
+                      options={MOVEMENT_MODE_OPTIONS}
+                      value={movementMode}
+                      onChange={handleMovementModeChange}
+                      ariaLabel="Режим перемещения"
+                      testIdPrefix="move-mode"
+                    />
+                    {movementMode === 'buttons' ? (
+                      <div className="control-motion-buttons">
+                        <SegmentedToggle
+                          options={MOVE_STEP_OPTIONS}
+                          value={moveStepKey}
+                          onChange={handleMoveStepChange}
+                          ariaLabel="Шаг перемещения"
+                          testIdPrefix="move-step"
+                        />
+                        <div className="control-coordinates-panel">
+                          <p className="joystick-readout" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
+                        </div>
+                        <div className="control-cross-wrap">
+                          <AxisCrossControls
+                            onMove={handleAxisMove}
+                            disabled={isBusy}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="joystick-panel">
+                        <div className="joystick-xy-control">
+                          <p className="joystick-axis-title">XY</p>
+                          <VirtualJoystick
+                            testId="axis-joystick"
+                            disabled={isBusy}
+                            onVectorChange={handleJoystickVectorChange}
+                          />
+                        </div>
+                        <div className="joystick-z-control">
+                          <p className="joystick-axis-title">Z</p>
+                          <VerticalAxisSlider
+                            value={printHeadPosition.z}
+                            min={HEAD_Z_BOUNDS_MM.min}
+                            max={HEAD_Z_BOUNDS_MM.max}
+                            step={1}
+                            onChange={handleJoystickZChange}
+                            minAtTop
+                            disabled={isBusy}
+                            testId="axis-z-slider"
+                          />
+                        </div>
+                        <div className="joystick-meta">
+                          <div className="joystick-meta-block">
+                            <p className="joystick-meta-label">Координаты</p>
+                            <p className="joystick-readout" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
+                          </div>
+                          <div className="joystick-meta-block">
+                            <p className="joystick-meta-label">Скорость XY</p>
+                            <p className="joystick-readout">{joystickSpeedMmS.toFixed(1)} / 50 мм/с</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                </div>
+
+              </div>
+            </section>
           ) : (
             <section className="screen-placeholder" data-testid={`screen-${activeScreen}`}>
-              <h2 className="screen-placeholder-title">{SCREEN_PLACEHOLDERS[activeScreen].title}</h2>
               <p className="screen-placeholder-body">{SCREEN_PLACEHOLDERS[activeScreen].description}</p>
             </section>
           )}

@@ -4,6 +4,9 @@ export interface PrinterSnapshot {
   wifiSsid: string
   ipAddress: string
   state: string
+  toolheadX: number
+  toolheadY: number
+  toolheadZ: number
   extruderTemp: number
   bedTemp: number
   modelFanPercent: number

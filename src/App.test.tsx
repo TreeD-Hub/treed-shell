@@ -8,7 +8,7 @@ describe('App', () => {
     expect(screen.getByTestId('screen-shell')).toBeInTheDocument()
     expect(screen.getByText('TreeD Принтер')).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByText('Печать')).toBeInTheDocument()
+      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
     })
     expect(screen.getByText('Обдув')).toBeInTheDocument()
     expect(
@@ -49,7 +49,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Файлы' }))
 
     expect(screen.getByTestId('screen-files')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Файлы' })).toBeInTheDocument()
+    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Файлы')
     expect(screen.getByText('Прокрутите вниз, чтобы найти нужную модель.')).toBeInTheDocument()
     expect(screen.queryByText(/Экран файлов подключен в каркас маршрутизации/i)).not.toBeInTheDocument()
     expect(screen.getAllByTestId('print-file-card')).toHaveLength(12)
@@ -67,6 +67,59 @@ describe('App', () => {
     expect(screen.getAllByTestId('print-file-card')[0]).toHaveTextContent('fan_shroud_prototype.gcode')
     expect(screen.getByText('2 ч 15 мин')).toBeInTheDocument()
     expect(screen.getByText('34 г')).toBeInTheDocument()
+  })
+
+  it('renders control widgets and switches parking mode to specific axis', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
+
+    expect(screen.getByTestId('screen-control')).toBeInTheDocument()
+    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Управление')
+    expect(screen.getByRole('heading', { name: 'Парковка' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Сервисный режим' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Управление обдувом' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Перемещение по осям' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Парковка по всем осям' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Отключить моторы' })).toBeInTheDocument()
+    expect(screen.getByTestId('model-fan-slider')).toBeInTheDocument()
+
+    const parkingAllButton = screen.getByTestId('parking-mode-all')
+    const parkingAxisButton = screen.getByTestId('parking-mode-axis')
+
+    expect(parkingAllButton).toHaveAttribute('aria-pressed', 'true')
+    expect(parkingAxisButton).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(parkingAxisButton)
+
+    expect(parkingAxisButton).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('parking-axis-X')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Парковка оси X' })).toBeInTheDocument()
+
+    const moveButtonsMode = screen.getByTestId('move-mode-buttons')
+    const moveJoystickMode = screen.getByTestId('move-mode-joystick')
+
+    expect(moveButtonsMode).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Сдвиг Y в плюс' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Сдвиг X в минус' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Сдвиг X в плюс' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Сдвиг Y в минус' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Сдвиг Z в плюс' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Сдвиг Z в минус' })).toBeInTheDocument()
+    expect(screen.getByTestId('move-step-1')).toBeInTheDocument()
+    expect(screen.getByTestId('axis-coordinates')).toBeInTheDocument()
+
+    fireEvent.click(moveJoystickMode)
+
+    expect(moveJoystickMode).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('axis-joystick')).toBeInTheDocument()
+    expect(screen.getByTestId('axis-z-slider')).toBeInTheDocument()
+    expect(screen.queryByTestId('move-step-1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('axis-coordinates')).toBeInTheDocument()
+    expect(screen.getByText(/Скорость XY/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Отключить моторы' }))
+    expect(screen.queryByText('Команда отключения моторов пока не подключена.')).not.toBeInTheDocument()
   })
 
   it('opens print file modal and handles start and delete actions', async () => {
@@ -119,6 +172,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Перейти в настройки Wi-Fi' }))
 
     expect(screen.getByTestId('screen-settings')).toBeInTheDocument()
+    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Настройки')
     expect(wifiButton).not.toHaveClass('is-active')
   })
 

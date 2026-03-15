@@ -1,4 +1,4 @@
-﻿import { moonrakerUrl } from '../../config'
+import { moonrakerUrl } from '../../config'
 import type { PrinterSnapshot, TransportClient } from './types'
 
 type MoonrakerResponse<T> = {
@@ -11,6 +11,9 @@ type PrinterInfoResult = {
 
 type ObjectsQueryResult = {
   status?: {
+    toolhead?: {
+      position?: [number, number, number]
+    }
     extruder?: {
       temperature?: number
     }
@@ -55,11 +58,12 @@ export function createMoonrakerClient(): TransportClient {
       const [info, objects] = await Promise.all([
         fetchMoonraker<PrinterInfoResult>('/printer/info'),
         fetchMoonraker<ObjectsQueryResult>(
-          '/printer/objects/query?extruder&heater_bed&fan&print_stats',
+          '/printer/objects/query?toolhead&extruder&heater_bed&fan&print_stats',
         ),
       ])
 
       const state = objects.status?.print_stats?.state ?? info.state ?? 'unknown'
+      const toolheadPosition = objects.status?.toolhead?.position ?? [0, 0, 0]
 
       return {
         source: 'live',
@@ -67,6 +71,9 @@ export function createMoonrakerClient(): TransportClient {
         wifiSsid: 'Moonraker Network',
         ipAddress: endpointHost,
         state,
+        toolheadX: Number(toolheadPosition[0] ?? 0),
+        toolheadY: Number(toolheadPosition[1] ?? 0),
+        toolheadZ: Number(toolheadPosition[2] ?? 0),
         extruderTemp: Number(objects.status?.extruder?.temperature ?? 0),
         bedTemp: Number(objects.status?.heater_bed?.temperature ?? 0),
         modelFanPercent: Math.max(0, Math.min(100, Number(objects.status?.fan?.speed ?? 0) * 100)),

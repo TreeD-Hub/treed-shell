@@ -1,4 +1,4 @@
-﻿import type { PrinterSnapshot, TransportClient } from './types'
+import type { PrinterSnapshot, TransportClient } from './types'
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -13,6 +13,9 @@ export function createMockClient(): TransportClient {
         wifiSsid: 'TreeD-Lab',
         ipAddress: '192.168.0.21',
         state: 'printing',
+        toolheadX: 125,
+        toolheadY: 125,
+        toolheadZ: 12.4,
         extruderTemp: 215,
         bedTemp: 58,
         modelFanPercent: 78,

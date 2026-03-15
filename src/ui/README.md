@@ -6,6 +6,7 @@
 - `iconAssets.ts` — единый реестр SVG-иконок;
 - `IconMask.tsx` — базовый рендер иконки через mask/currentColor;
 - `buttons.tsx` — типовые кнопки (`StatusIconButton`, `ActionSquareButton`, `NavItemButton`);
+- `controlWidgets.tsx` — primitives для экранов управления (`SegmentedToggle`, `AxisCrossControls`, `VirtualJoystick`);
 - `metrics.tsx` — типовые виджеты метрик (`TemperatureMetric`, `PlainMetric`);
 - `printFileCard.tsx` — типовая карточка файла печати для библиотечных и файловых экранов;
 - `PrintPreviewIcon.tsx` — фирменная иконка превью модели.
