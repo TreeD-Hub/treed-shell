@@ -377,24 +377,27 @@ body {
   min-height: 0;
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr);
-  gap: var(--space-xs);
-  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  align-items: stretch;
 }
 
 .control-side-stack {
   min-height: 0;
   display: grid;
-  align-content: start;
-  gap: var(--space-xs);
-  align-self: start;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  gap: var(--space-sm);
+  align-self: stretch;
 }
 
 .control-side-top {
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-xs);
-  align-items: start;
+  gap: var(--space-sm);
+  align-items: stretch;
 }
 
 .control-card {
@@ -409,15 +412,25 @@ body {
 }
 
 .control-card-motion {
+  min-height: 0;
   padding: var(--space-sm);
   gap: var(--space-sm);
   overflow: hidden;
   height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .control-card-fan {
+  min-height: 0;
+  height: 100%;
   padding: var(--space-sm);
   gap: var(--space-xs);
+  align-content: start;
+}
+
+.control-card-parking,
+.control-card-service {
+  height: 100%;
 }
 
 .control-card-parking .segmented-toggle-btn {
@@ -678,7 +691,7 @@ body {
   height: 100%;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: var(--space-sm);
-  align-content: start;
+  align-content: stretch;
 }
 
 .control-motion-buttons .segmented-toggle-btn {
@@ -797,10 +810,10 @@ body {
 .control-cross-wrap {
   min-height: 0;
   display: grid;
-  align-items: center;
+  align-items: end;
   justify-items: stretch;
   width: 100%;
-  padding-top: var(--space-sm);
+  padding-top: var(--space-xs);
 }
 
 .joystick-z-control {
