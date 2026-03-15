@@ -2,45 +2,54 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import App from './App'
 
 describe('App', () => {
-  it('renders layout according to landscape dashboard frame', async () => {
+  it('renders idle placeholder on dashboard before print start', async () => {
     render(<App />)
 
     expect(screen.getByTestId('screen-shell')).toBeInTheDocument()
     expect(screen.getByText('TreeD Принтер')).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Ожидание печати')
     })
-    expect(screen.getByText('Обдув')).toBeInTheDocument()
-    expect(
-      screen.getByText((_, element) => {
-        if (!element) {
-          return false
-        }
-        return element.textContent === '215/220°C'
-      }),
-    ).toBeInTheDocument()
+    expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Ожидание печати' })).not.toBeInTheDocument()
+    const idleNotesInput = screen.getByTestId('idle-notes-input') as HTMLTextAreaElement
+    expect(idleNotesInput.value.length).toBeGreaterThan(0)
+    fireEvent.focus(idleNotesInput)
+    expect(screen.getByTestId('idle-notes-keyboard')).toBeInTheDocument()
+    idleNotesInput.setSelectionRange(idleNotesInput.value.length, idleNotesInput.value.length)
+    fireEvent.click(screen.getByRole('button', { name: 'Символ О' }))
+    expect(idleNotesInput.value.endsWith('о')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Скрыть клавиатуру' }))
+    expect(screen.queryByTestId('idle-notes-keyboard')).not.toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: /Основная навигация/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Уведомления' })).toBeInTheDocument()
-    expect(screen.getByText('Ускорение')).toBeInTheDocument()
-    expect(screen.getByText('Объемный расход')).toBeInTheDocument()
-    expect(screen.getByText('Откат')).toBeInTheDocument()
-    expect(screen.getByText('Z-offset')).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'шаг babystep' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '0.1' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '0.05' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '0.025' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Пауза' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Стоп' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Пауза' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Стоп' })).not.toBeInTheDocument()
   })
 
-  it('handles pause command from action stack', async () => {
+  it('returns to waiting state after print cancel', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Пауза' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Файлы' }))
+    fireEvent.click(screen.getAllByTestId('print-file-card')[0])
+    fireEvent.click(screen.getByTestId('print-file-start-button'))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Пауза|Пауза.../i })).toBeInTheDocument()
+      expect(screen.queryByTestId('print-file-modal')).not.toBeInTheDocument()
     })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Стоп' }))
+    expect(screen.getByTestId('print-cancel-modal')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('print-cancel-confirm-button'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Ожидание печати')
+    })
+    expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
   })
 
   it('switches between screens from bottom navigation', () => {
@@ -143,7 +152,9 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('print-file-modal')).not.toBeInTheDocument()
     })
+    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
 
+    fireEvent.click(screen.getByRole('button', { name: 'Файлы' }))
     fireEvent.click(screen.getAllByTestId('print-file-card')[0])
     fireEvent.click(screen.getByRole('button', { name: 'Удалить файл' }))
 
@@ -167,7 +178,7 @@ describe('App', () => {
     expect(wifiButton).toHaveClass('is-active')
     expect(screen.getByText('Wi-Fi сеть')).toBeInTheDocument()
     expect(screen.getByText('IP адрес')).toBeInTheDocument()
-    expect(screen.getByText('Время')).toBeInTheDocument()
+    expect(within(wifiPopup).getByText('Время')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Перейти в настройки Wi-Fi' }))
 

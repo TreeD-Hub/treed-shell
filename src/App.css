@@ -339,6 +339,322 @@ body {
   line-height: 1.35;
 }
 
+.dashboard-idle-screen {
+  min-height: 0;
+  height: 100%;
+  grid-column: 1 / -1;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  gap: var(--space-sm);
+  border-radius: 14px;
+  border: 1px solid var(--color-border-default);
+  background: linear-gradient(180deg, var(--color-block-surface), var(--color-surface-elevated));
+  padding: var(--space-sm);
+  overflow: hidden;
+}
+
+.dashboard-idle-screen::before {
+  content: '';
+  position: absolute;
+  inset: -35%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 28% 28%, var(--color-primary-surface-soft) 0%, transparent 46%),
+    radial-gradient(circle at 68% 76%, var(--color-primary-surface-soft) 0%, transparent 48%),
+    repeating-linear-gradient(45deg, transparent 0 28px, var(--color-border-subtle) 28px 29px),
+    repeating-linear-gradient(-45deg, transparent 0 28px, var(--color-border-subtle) 28px 29px);
+  opacity: 0.44;
+  transform: rotate(-7deg);
+}
+
+.dashboard-idle-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--color-overlay));
+}
+
+.dashboard-idle-screen > * {
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-idle-hero {
+  min-height: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  text-align: center;
+}
+
+.dashboard-idle-logo {
+  width: min(420px, 84%);
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 0 16px var(--color-primary-glow));
+}
+
+.idle-mini-widget {
+  min-height: 0;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-elevated);
+  padding: var(--space-xxs) var(--space-sm);
+  display: grid;
+  gap: var(--space-micro);
+  align-content: start;
+}
+
+.idle-mini-label {
+  margin: 0;
+  font-size: var(--font-size-tiny);
+  color: var(--color-text-secondary);
+  line-height: 1.1;
+}
+
+.idle-mini-value {
+  margin: 0;
+  font-size: var(--font-size-body-large);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  line-height: 1.1;
+}
+
+.idle-mini-note {
+  margin: 0;
+  font-size: var(--font-size-tiny);
+  color: var(--color-text-soft);
+}
+
+.idle-temp-grid {
+  display: grid;
+  gap: var(--space-xxs);
+}
+
+.idle-temp-grid p {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.idle-temp-grid span {
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+
+.idle-temp-grid strong {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.dashboard-idle-sidebar {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--space-xs);
+}
+
+.idle-mini-widget-service {
+  align-content: start;
+}
+
+.idle-service-metrics {
+  display: grid;
+  gap: var(--space-xxs);
+}
+
+.idle-service-metrics p {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.idle-service-metrics span {
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+
+.idle-service-metrics strong {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.idle-service-time {
+  margin-top: var(--space-xxs);
+  padding-top: var(--space-xxs);
+  border-top: 1px solid var(--color-border-default);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.idle-service-time span {
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+
+.idle-service-time strong {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.dashboard-idle-logo-image {
+  width: min(360px, 100%);
+  max-height: 220px;
+  height: auto;
+  object-fit: contain;
+  animation: idle-logo-glow 2.8s ease-in-out infinite;
+}
+
+.dashboard-idle-title {
+  margin: 0;
+  font-size: var(--font-size-body-large);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+  text-shadow: none;
+  text-align: center;
+}
+
+.dashboard-idle-notes {
+  min-height: 0;
+  height: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-elevated);
+  padding: var(--space-xs) var(--space-sm);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-xs);
+  overflow: hidden;
+}
+
+.dashboard-idle-notes h3 {
+  margin: 0;
+  font-size: var(--font-size-body-large);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.dashboard-idle-notes-input {
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-block-surface);
+  color: var(--color-text-primary);
+  padding: var(--space-xs);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body);
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-default) transparent;
+}
+
+.dashboard-idle-notes-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.dashboard-idle-notes-input:focus {
+  border-color: var(--color-primary-ring);
+  box-shadow:
+    0 0 0 1px var(--color-primary-ring),
+    0 0 14px var(--color-primary-glow);
+}
+
+.dashboard-idle-notes-input::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard-idle-notes-input::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-idle-notes-input::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--color-border-default);
+}
+
+.dashboard-idle-notes-input::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-ring);
+}
+
+.idle-notes-keyboard {
+  position: absolute;
+  left: var(--space-sm);
+  right: calc(292px + (var(--space-sm) * 2));
+  bottom: var(--space-sm);
+  z-index: 2;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-default);
+  background: linear-gradient(180deg, var(--color-surface-elevated), var(--color-block-surface));
+  box-shadow: 0 12px 28px var(--color-shadow-strong);
+  padding: var(--space-xs);
+  display: grid;
+  gap: var(--space-xxs);
+}
+
+.idle-notes-keyboard-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xxs);
+}
+
+.idle-notes-keyboard-key {
+  min-width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.idle-notes-keyboard-key:hover {
+  border-color: var(--color-primary-ring);
+}
+
+.idle-notes-keyboard-key:active {
+  background: var(--color-primary-surface-soft);
+  box-shadow: 0 0 10px var(--color-primary-glow);
+}
+
+.idle-notes-keyboard-row-actions {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px 94px;
+}
+
+.idle-notes-keyboard-key-space {
+  width: 100%;
+}
+
+.idle-notes-keyboard-key-action,
+.idle-notes-keyboard-key-close {
+  background: var(--color-block-surface);
+}
+
 .control-screen {
   min-height: 0;
   grid-column: 1 / -1;
@@ -1305,6 +1621,68 @@ body {
   animation: top-popup-layer-enter 0.2s ease-out;
 }
 
+.print-cancel-modal-layer {
+  position: absolute;
+  inset: 64px 0 0;
+  z-index: 30;
+  background: var(--color-overlay);
+  padding: var(--space-sm);
+  display: grid;
+  place-items: center;
+  animation: top-popup-layer-enter 0.2s ease-out;
+}
+
+.print-cancel-modal-dialog {
+  width: min(420px, 100%);
+  border-radius: 14px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-block-surface);
+  box-shadow: 0 22px 44px var(--color-shadow-strong);
+  padding: var(--space-md);
+  display: grid;
+  gap: var(--space-sm);
+  animation: top-popup-dialog-enter 0.24s cubic-bezier(0.2, 0.9, 0.18, 1);
+}
+
+.print-cancel-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.print-cancel-modal-head h2 {
+  margin: 0;
+  font-size: var(--font-size-heading-medium);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.print-cancel-modal-close {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-heading-medium);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.print-cancel-modal-body {
+  margin: 0;
+  font-size: var(--font-size-body-large);
+  line-height: 1.35;
+  color: var(--color-text-secondary);
+}
+
+.print-cancel-modal-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
 .file-modal-dialog {
   width: min(420px, 100%);
   max-height: calc(100% - (var(--space-sm) * 2));
@@ -1980,12 +2358,32 @@ body {
   }
 }
 
+@keyframes idle-logo-glow {
+  0% {
+    filter: drop-shadow(0 0 10px var(--color-primary-glow));
+    transform: scale(1);
+  }
+
+  50% {
+    filter: drop-shadow(0 0 24px var(--color-primary-glow));
+    transform: scale(1.012);
+  }
+
+  100% {
+    filter: drop-shadow(0 0 10px var(--color-primary-glow));
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .top-popup-layer,
   .top-popup-dialog,
   .top-popup-content,
   .file-modal-layer,
   .file-modal-dialog,
+  .print-cancel-modal-layer,
+  .print-cancel-modal-dialog,
+  .dashboard-idle-logo-image,
   .bottom-nav-indicator {
     animation: none;
   }
@@ -2004,6 +2402,7 @@ body {
   .step-btn,
   .step-selector-indicator,
   .bottom-nav-indicator,
+  .idle-notes-keyboard-key,
   .nav-item,
   .nav-icon {
     transition: none;

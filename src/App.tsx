@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, type CSSProperties, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePrinterCommands } from './core/commands'
 import { usePrinterSnapshot } from './core/store/usePrinterSnapshot'
 import {
@@ -34,6 +34,7 @@ import {
   VirtualJoystick,
 } from './ui'
 import { PRINT_FILE_LIBRARY, type PrintFileItem } from './printFiles'
+import treeDLogoAsset from './assets/logo_treeD-28.svg'
 import './App.css'
 
 const DEFAULT_SCREEN: ScreenId = 'dashboard'
@@ -48,6 +49,7 @@ const TOP_BAR_BUTTON_SIZE = 56
 const TOP_BAR_BUTTON_GAP = 8
 const TOP_BAR_RIGHT_PADDING = 24
 const FILE_MODAL_TITLE_ID = 'print-file-modal-title'
+const PRINT_CANCEL_MODAL_TITLE_ID = 'print-cancel-modal-title'
 type FilesSortKey = 'name' | 'addedAt'
 type ParkingMode = 'all' | 'axis'
 type MovementMode = 'buttons' | 'joystick'
@@ -98,6 +100,19 @@ const HEAD_Z_BOUNDS_MM = { min: 0, max: 200 } as const
 const MODEL_FAN_BOUNDS_PERCENT = { min: 0, max: 100 } as const
 const MODEL_FAN_STEP_PERCENT = 5
 const MAX_JOYSTICK_SPEED_MM_S = 50
+const MAINTENANCE_STATUS = {
+  runtimeHours: 874,
+  hoursLeft: 126,
+} as const
+const IDLE_NOTES_DEFAULT_TEXT = [
+  'Перед запуском проверьте очистку стола и состояние поверхности.',
+  'Если модель новая, сделайте короткий тест первого слоя.',
+].join('\n')
+const IDLE_NOTES_KEYBOARD_ROWS: string[][] = [
+  ['Й', 'Ц', 'У', 'К', 'Е', 'Н', 'Г', 'Ш', 'Щ', 'З', 'Х'],
+  ['Ф', 'Ы', 'В', 'А', 'П', 'Р', 'О', 'Л', 'Д', 'Ж', 'Э'],
+  ['Я', 'Ч', 'С', 'М', 'И', 'Т', 'Ь', 'Б', 'Ю'],
+]
 
 function clampAxisValue(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -166,6 +181,10 @@ function App() {
   const [filesSortKey, setFilesSortKey] = useState<FilesSortKey>('name')
   const [filesLibrary, setFilesLibrary] = useState<PrintFileItem[]>(() => [...PRINT_FILE_LIBRARY])
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
+  const [activePrintFileName, setActivePrintFileName] = useState<string | null>(null)
+  const [isPrintCancelConfirmOpen, setIsPrintCancelConfirmOpen] = useState<boolean>(false)
+  const [idleNotesText, setIdleNotesText] = useState<string>(IDLE_NOTES_DEFAULT_TEXT)
+  const [isIdleNotesKeyboardOpen, setIsIdleNotesKeyboardOpen] = useState<boolean>(false)
   const [parkingMode, setParkingMode] = useState<ParkingMode>('all')
   const [parkingAxis, setParkingAxis] = useState<AxisId>('X')
   const [movementMode, setMovementMode] = useState<MovementMode>('buttons')
@@ -182,9 +201,11 @@ function App() {
       z: snapshot.toolheadZ,
     }),
   )
+  const idleNotesInputRef = useRef<HTMLTextAreaElement | null>(null)
 
   const printFill = Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
   const isBusy = pendingCommand !== null
+  const hasActivePrint = activePrintFileName !== null
   const isFilesScreenActive = activeScreen === 'files'
   const activeNavIndex = Math.max(
     0,
@@ -205,13 +226,15 @@ function App() {
   const wifiSsidLabel = snapshot.connection === 'online' ? snapshot.wifiSsid : 'Не подключено'
   const wifiIpLabel = snapshot.connection === 'online' ? snapshot.ipAddress : '—'
   const cloudStatusLabel = snapshot.connection === 'online' ? 'В сети' : 'Не в сети'
+  const idleNozzleTempLabel = `${rounded(snapshot.extruderTemp)} °C`
+  const idleBedTempLabel = `${rounded(snapshot.bedTemp)} °C`
   const topBarScreenLabel = useMemo(() => {
     if (activeScreen === 'dashboard') {
-      return statusLabel(snapshot.state)
+      return hasActivePrint ? statusLabel(snapshot.state) : 'Ожидание печати'
     }
 
     return BOTTOM_NAV_ITEMS.find((item) => item.id === activeScreen)?.label ?? statusLabel(snapshot.state)
-  }, [activeScreen, snapshot.state])
+  }, [activeScreen, hasActivePrint, snapshot.state])
   const sortedPrintFiles = useMemo(() => {
     const nextItems = [...filesLibrary]
 
@@ -363,6 +386,84 @@ function App() {
     setSelectedFileId(null)
   }, [])
 
+  const closePrintCancelConfirm = useCallback(() => {
+    setIsPrintCancelConfirmOpen(false)
+  }, [])
+
+  const setIdleNotesCaret = useCallback((nextCaret: number) => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.requestAnimationFrame(() => {
+      const input = idleNotesInputRef.current
+      if (input === null) {
+        return
+      }
+      input.focus()
+      input.setSelectionRange(nextCaret, nextCaret)
+    })
+  }, [])
+
+  const handleIdleNotesChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    setIdleNotesText(event.target.value)
+  }, [])
+
+  const handleIdleNotesKeyboardOpen = useCallback(() => {
+    setIsIdleNotesKeyboardOpen(true)
+  }, [])
+
+  const handleIdleNotesKeyboardClose = useCallback(() => {
+    setIsIdleNotesKeyboardOpen(false)
+  }, [])
+
+  const handleIdleNotesKeyMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+  }, [])
+
+  const handleIdleNotesVirtualKey = useCallback((key: string) => {
+    const input = idleNotesInputRef.current
+    if (input === null) {
+      return
+    }
+
+    if (key === 'close') {
+      setIsIdleNotesKeyboardOpen(false)
+      return
+    }
+
+    const selectionStart = input.selectionStart ?? idleNotesText.length
+    const selectionEnd = input.selectionEnd ?? idleNotesText.length
+    let nextText = idleNotesText
+    let nextCaret = selectionStart
+
+    if (key === 'backspace') {
+      if (selectionStart !== selectionEnd) {
+        nextText = `${idleNotesText.slice(0, selectionStart)}${idleNotesText.slice(selectionEnd)}`
+        nextCaret = selectionStart
+      } else if (selectionStart > 0) {
+        nextText = `${idleNotesText.slice(0, selectionStart - 1)}${idleNotesText.slice(selectionStart)}`
+        nextCaret = selectionStart - 1
+      }
+    } else {
+      const value = key === 'space'
+        ? ' '
+        : key === 'enter'
+          ? '\n'
+          : key
+      nextText = `${idleNotesText.slice(0, selectionStart)}${value}${idleNotesText.slice(selectionEnd)}`
+      nextCaret = selectionStart + value.length
+    }
+
+    if (nextText === idleNotesText) {
+      setIdleNotesCaret(nextCaret)
+      return
+    }
+
+    setIdleNotesText(nextText)
+    setIdleNotesCaret(nextCaret)
+  }, [idleNotesText, setIdleNotesCaret])
+
   function handlePrintFileSelect(fileId: string): void {
     setSelectedFileId(fileId)
   }
@@ -372,6 +473,9 @@ function App() {
       return
     }
 
+    if (activePrintFileName === selectedPrintFile.name) {
+      setActivePrintFileName(null)
+    }
     setFilesLibrary((currentItems) => currentItems.filter((item) => item.id !== selectedPrintFile.id))
     closeFileModal()
   }
@@ -386,7 +490,9 @@ function App() {
       filename: selectedPrintFile.name,
     })
     if (ok) {
+      setActivePrintFileName(selectedPrintFile.name)
       await refresh()
+      setActiveScreen('dashboard')
       closeFileModal()
     }
   }
@@ -493,6 +599,46 @@ function App() {
   }, [closeFileModal, selectedFileId])
 
   useEffect(() => {
+    if (!isPrintCancelConfirmOpen || typeof window === 'undefined') {
+      return
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closePrintCancelConfirm()
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [closePrintCancelConfirm, isPrintCancelConfirmOpen])
+
+  useEffect(() => {
+    if (!isIdleNotesKeyboardOpen || typeof window === 'undefined') {
+      return
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleIdleNotesKeyboardClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [handleIdleNotesKeyboardClose, isIdleNotesKeyboardOpen])
+
+  useEffect(() => {
+    if (activeScreen !== 'dashboard' || hasActivePrint) {
+      setIsIdleNotesKeyboardOpen(false)
+    }
+  }, [activeScreen, hasActivePrint])
+
+  useEffect(() => {
     if (activeScreen !== 'files' && selectedFileId !== null) {
       closeFileModal()
     }
@@ -578,10 +724,17 @@ function App() {
     }
   }
 
-  async function handleStop(): Promise<void> {
+  function handleStopRequest(): void {
+    setIsPrintCancelConfirmOpen(true)
+  }
+
+  async function handleStopConfirm(): Promise<void> {
     const ok = await executeCommand({ command: 'cancel' })
     if (ok) {
+      setActivePrintFileName(null)
       await refresh()
+      setActiveScreen('dashboard')
+      closePrintCancelConfirm()
     }
   }
 
@@ -613,7 +766,8 @@ function App() {
 
         <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''}`}>
           {activeScreen === 'dashboard' ? (
-            <>
+            hasActivePrint ? (
+              <>
               <section className="job-card">
                 <div className="preview-panel">
                   <div className="preview-inner">
@@ -622,7 +776,7 @@ function App() {
                 </div>
 
                 <div className="job-info">
-                  <p className="job-name">{DASHBOARD_VALUES.fileName}</p>
+                  <p className="job-name">{activePrintFileName ?? DASHBOARD_VALUES.fileName}</p>
 
                   <div className="job-metrics">
                     <div>
@@ -688,7 +842,7 @@ function App() {
                       icon="actionStopCritical"
                       tone="danger"
                       label={pendingCommand === 'cancel' ? 'Стоп...' : 'Стоп'}
-                      onClick={() => void handleStop()}
+                      onClick={handleStopRequest}
                       disabled={isBusy}
                     />
                   </div>
@@ -754,7 +908,111 @@ function App() {
                   </aside>
                 </div>
               </section>
-            </>
+              </>
+            ) : (
+              <section className="dashboard-idle-screen" data-testid="screen-dashboard-idle">
+                <div className="dashboard-idle-hero">
+                  <div className="dashboard-idle-logo" aria-hidden="true">
+                    <img className="dashboard-idle-logo-image" src={treeDLogoAsset} alt="" />
+                  </div>
+                </div>
+
+                <aside className="dashboard-idle-sidebar">
+                  <article className="idle-mini-widget idle-mini-widget-temps">
+                    <p className="idle-mini-label">Температура</p>
+                    <div className="idle-temp-grid">
+                      <p><span>Сопло</span><strong>{idleNozzleTempLabel}</strong></p>
+                      <p><span>Стол</span><strong>{idleBedTempLabel}</strong></p>
+                    </div>
+                  </article>
+
+                  <article className="idle-mini-widget idle-mini-widget-service">
+                    <p className="idle-mini-label">ТО</p>
+                    <div className="idle-service-metrics">
+                      <p><span>Пробег</span><strong>{MAINTENANCE_STATUS.runtimeHours} ч</strong></p>
+                      <p><span>До ТО</span><strong>{MAINTENANCE_STATUS.hoursLeft} ч</strong></p>
+                    </div>
+                    <div className="idle-service-time">
+                      <span>Время</span>
+                      <strong>{formattedSnapshotTime}</strong>
+                    </div>
+                  </article>
+
+                  <article className="dashboard-idle-notes" aria-label="Заметки">
+                    <h3>Заметки</h3>
+                    <textarea
+                      ref={idleNotesInputRef}
+                      className="dashboard-idle-notes-input"
+                      value={idleNotesText}
+                      onFocus={handleIdleNotesKeyboardOpen}
+                      onChange={handleIdleNotesChange}
+                      spellCheck={false}
+                      data-testid="idle-notes-input"
+                    />
+                  </article>
+                </aside>
+
+                {isIdleNotesKeyboardOpen ? (
+                  <div className="idle-notes-keyboard" data-testid="idle-notes-keyboard">
+                    {IDLE_NOTES_KEYBOARD_ROWS.map((row, rowIndex) => (
+                      <div className="idle-notes-keyboard-row" key={`idle-notes-keyboard-row-${rowIndex}`}>
+                        {row.map((label) => (
+                          <button
+                            key={label}
+                            type="button"
+                            className="idle-notes-keyboard-key"
+                            aria-label={`Символ ${label}`}
+                            onMouseDown={handleIdleNotesKeyMouseDown}
+                            onClick={() => handleIdleNotesVirtualKey(label.toLocaleLowerCase('ru-RU'))}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+
+                    <div className="idle-notes-keyboard-row idle-notes-keyboard-row-actions">
+                      <button
+                        type="button"
+                        className="idle-notes-keyboard-key idle-notes-keyboard-key-action"
+                        aria-label="Удалить символ"
+                        onMouseDown={handleIdleNotesKeyMouseDown}
+                        onClick={() => handleIdleNotesVirtualKey('backspace')}
+                      >
+                        ⌫
+                      </button>
+                      <button
+                        type="button"
+                        className="idle-notes-keyboard-key idle-notes-keyboard-key-space"
+                        aria-label="Пробел"
+                        onMouseDown={handleIdleNotesKeyMouseDown}
+                        onClick={() => handleIdleNotesVirtualKey('space')}
+                      >
+                        Пробел
+                      </button>
+                      <button
+                        type="button"
+                        className="idle-notes-keyboard-key idle-notes-keyboard-key-action"
+                        aria-label="Новая строка"
+                        onMouseDown={handleIdleNotesKeyMouseDown}
+                        onClick={() => handleIdleNotesVirtualKey('enter')}
+                      >
+                        ↵
+                      </button>
+                      <button
+                        type="button"
+                        className="idle-notes-keyboard-key idle-notes-keyboard-key-close"
+                        aria-label="Скрыть клавиатуру"
+                        onMouseDown={handleIdleNotesKeyMouseDown}
+                        onClick={handleIdleNotesKeyboardClose}
+                      >
+                        Скрыть
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            )
           ) : isFilesScreenActive ? (
             <section className="files-screen" data-testid="screen-files">
               <div className="files-scroll-area" data-testid="files-scroll-area">
@@ -1035,6 +1293,57 @@ function App() {
                   disabled={isBusy}
                 >
                   Удалить файл
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
+
+        {isPrintCancelConfirmOpen ? (
+          <div className="print-cancel-modal-layer" role="presentation" onClick={closePrintCancelConfirm}>
+            <section
+              className="print-cancel-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={PRINT_CANCEL_MODAL_TITLE_ID}
+              data-testid="print-cancel-modal"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header className="print-cancel-modal-head">
+                <h2 id={PRINT_CANCEL_MODAL_TITLE_ID}>Подтвердите отмену печати</h2>
+                <button
+                  type="button"
+                  className="print-cancel-modal-close"
+                  aria-label="Закрыть окно подтверждения отмены печати"
+                  onClick={closePrintCancelConfirm}
+                  disabled={isBusy}
+                >
+                  ×
+                </button>
+              </header>
+
+              <p className="print-cancel-modal-body">
+                Текущая задача будет остановлена. Вы уверены, что хотите отменить печать?
+              </p>
+
+              <div className="print-cancel-modal-actions">
+                <button
+                  type="button"
+                  className="file-modal-action"
+                  data-testid="print-cancel-close-button"
+                  onClick={closePrintCancelConfirm}
+                  disabled={isBusy}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="file-modal-action file-modal-action-danger"
+                  data-testid="print-cancel-confirm-button"
+                  onClick={() => void handleStopConfirm()}
+                  disabled={isBusy}
+                >
+                  {pendingCommand === 'cancel' ? 'Остановка...' : 'Остановить печать'}
                 </button>
               </div>
             </section>
