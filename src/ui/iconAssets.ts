@@ -2,9 +2,13 @@ import actionPause from '../assets/icons/action-pause.svg'
 import actionStopCritical from '../assets/icons/action-stop-critical.svg'
 import menuControl from '../assets/icons/menu-control.svg'
 import menuDashboard from '../assets/icons/menu-dashboard.svg'
+import menuDevice from '../assets/icons/menu-device.svg'
 import menuFiles from '../assets/icons/menu-files.svg'
+import menuInterface from '../assets/icons/menu-interface.svg'
+import menuLanguage from '../assets/icons/menu-language.svg'
 import menuMacros from '../assets/icons/menu-macros.svg'
 import menuSettings from '../assets/icons/menu-settings.svg'
+import menuUpdates from '../assets/icons/menu-updates.svg'
 import statusCloud from '../assets/icons/status-cloud.svg'
 import statusNotification from '../assets/icons/status-notification.svg'
 import statusPower from '../assets/icons/status-power.svg'
@@ -15,9 +19,13 @@ export const UI_ICON_ASSETS = {
   actionStopCritical,
   menuControl,
   menuDashboard,
+  menuDevice,
   menuFiles,
+  menuInterface,
+  menuLanguage,
   menuMacros,
   menuSettings,
+  menuUpdates,
   statusCloud,
   statusNotification,
   statusPower,
