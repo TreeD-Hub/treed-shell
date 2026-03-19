@@ -1,4 +1,4 @@
-import { type ChangeEvent, type CSSProperties, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, type CSSProperties, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePrinterCommands } from './core/commands'
 import { usePrinterSnapshot } from './core/store/usePrinterSnapshot'
 import {
@@ -35,6 +35,10 @@ import {
   type VirtualKeyboardLanguage,
   StatusIconButton,
   TemperatureMetric,
+  TemperatureTrendChart,
+  TuneCompactStepperInput,
+  TuneModeToggle,
+  TuneNumberControl,
   type AxisId,
   type JoystickVector,
   VerticalAxisSlider,
@@ -57,12 +61,27 @@ const TOP_BAR_BUTTON_GAP = 8
 const TOP_BAR_RIGHT_PADDING = 24
 const FILE_MODAL_TITLE_ID = 'print-file-modal-title'
 const PRINT_CANCEL_MODAL_TITLE_ID = 'print-cancel-modal-title'
+const PRINT_TUNE_MODAL_TITLE_ID = 'print-tune-modal-title'
 type FilesSortKey = 'name' | 'addedAt'
 type ParkingMode = 'all' | 'axis'
 type MovementMode = 'buttons' | 'joystick'
 type MoveStepKey = '1' | '10' | '25' | '100'
 type MacrosGroupId = 'bedMesh'
 type BedCalibrationStage = 'launch' | 'manual' | 'zOffset'
+type ActivePrintUiState = 'printing' | 'paused'
+type PrintTuneGroupId =
+  | 'nozzle'
+  | 'bed'
+  | 'volumetricFlow'
+  | 'fan'
+  | 'flow'
+  | 'speed'
+  | 'accel'
+  | 'kFactor'
+  | 'retract'
+  | 'progress'
+  | 'layers'
+type TemperatureChartMode = 'nozzle' | 'bed' | 'both'
 type KeyboardTarget = 'idleNotes' | 'wifiSearch' | 'wifiPassword' | 'consoleCommand'
 type SettingsGroupId =
   | 'system'
@@ -113,6 +132,53 @@ type TopPopupPosition = {
   top: number
   left: number
   arrowLeft: number
+}
+
+const PRINT_TUNE_GROUP_META: Record<PrintTuneGroupId, { label: string; note: string }> = {
+  nozzle: {
+    label: 'Температуры',
+    note: '',
+  },
+  bed: {
+    label: 'Температуры',
+    note: '',
+  },
+  volumetricFlow: {
+    label: 'Объемный расход',
+    note: 'Настройте лимит объемного расхода.',
+  },
+  fan: {
+    label: 'Обдув',
+    note: 'Настройте обдув модели.',
+  },
+  flow: {
+    label: 'Поток',
+    note: 'Настройте поток экструдера.',
+  },
+  speed: {
+    label: 'Скорость',
+    note: 'Настройте скорость печати.',
+  },
+  accel: {
+    label: 'Ускорение',
+    note: 'Настройте ускорение печати.',
+  },
+  kFactor: {
+    label: 'K-factor',
+    note: 'Настройте pressure advance (K-factor).',
+  },
+  retract: {
+    label: 'Откат',
+    note: 'Настройте параметры отката.',
+  },
+  progress: {
+    label: 'Прогресс печати',
+    note: 'Проверьте прогресс и скорректируйте расчетное время завершения.',
+  },
+  layers: {
+    label: 'Слой',
+    note: 'Задайте слой, на котором нужно поставить печать на паузу.',
+  },
 }
 
 const FILES_SORT_OPTIONS: Array<{ id: FilesSortKey; label: string }> = [
@@ -273,6 +339,8 @@ const WIFI_NETWORK_LIBRARY: WifiNetworkItem[] = [
   },
 ]
 const DEFAULT_SELECTED_WIFI_NETWORK_ID = WIFI_NETWORK_LIBRARY.find((item) => item.connected)?.id ?? WIFI_NETWORK_LIBRARY[0]?.id ?? null
+const DEFAULT_NOZZLE_TARGET_TEMP = TEMPERATURE_METRIC_DEFINITIONS.find((item) => item.key === 'nozzle')?.target ?? 220
+const DEFAULT_BED_TARGET_TEMP = TEMPERATURE_METRIC_DEFINITIONS.find((item) => item.key === 'bed')?.target ?? 60
 const HEAD_X_BOUNDS_MM = { min: 0, max: 250 } as const
 const HEAD_Y_BOUNDS_MM = { min: 0, max: 250 } as const
 const HEAD_Z_BOUNDS_MM = { min: 0, max: 200 } as const
@@ -325,6 +393,27 @@ function formatAxisCoordinate(value: number): string {
   return value.toFixed(1)
 }
 
+function shiftTimeLabelByMinutes(timeLabel: string, offsetMinutes: number): string {
+  const parts = timeLabel.split(':')
+  if (parts.length !== 2) {
+    return timeLabel
+  }
+
+  const hours = Number(parts[0])
+  const minutes = Number(parts[1])
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return timeLabel
+  }
+
+  const sourceDate = new Date()
+  sourceDate.setHours(hours, minutes, 0, 0)
+  sourceDate.setMinutes(sourceDate.getMinutes() + Math.round(offsetMinutes))
+
+  const nextHours = String(sourceDate.getHours()).padStart(2, '0')
+  const nextMinutes = String(sourceDate.getMinutes()).padStart(2, '0')
+  return `${nextHours}:${nextMinutes}`
+}
+
 function wifiSecurityLabel(security: WifiNetworkSecurity): string {
   if (security === 'open') {
     return 'Открытая'
@@ -374,7 +463,21 @@ function App() {
   const [filesLibrary, setFilesLibrary] = useState<PrintFileItem[]>(() => [...PRINT_FILE_LIBRARY])
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
   const [activePrintFileName, setActivePrintFileName] = useState<string | null>(null)
+  const [activePrintUiState, setActivePrintUiState] = useState<ActivePrintUiState | null>(null)
   const [isPrintCancelConfirmOpen, setIsPrintCancelConfirmOpen] = useState<boolean>(false)
+  const [activePrintTuneGroup, setActivePrintTuneGroup] = useState<PrintTuneGroupId | null>(null)
+  const [printNozzleTargetTemp, setPrintNozzleTargetTemp] = useState<number>(DEFAULT_NOZZLE_TARGET_TEMP)
+  const [printBedTargetTemp, setPrintBedTargetTemp] = useState<number>(DEFAULT_BED_TARGET_TEMP)
+  const [printVolumetricFlowMm3S, setPrintVolumetricFlowMm3S] = useState<number>(DASHBOARD_VALUES.volumetricFlowMm3S)
+  const [printFanPercent, setPrintFanPercent] = useState<number>(rounded(snapshot.modelFanPercent))
+  const [printFlowPercent, setPrintFlowPercent] = useState<number>(DASHBOARD_VALUES.flowPercent)
+  const [printSpeedMmS, setPrintSpeedMmS] = useState<number>(DASHBOARD_VALUES.speedMmS)
+  const [printAccelMmS2, setPrintAccelMmS2] = useState<number>(DASHBOARD_VALUES.accelMmS2)
+  const [printKFactor, setPrintKFactor] = useState<number>(DASHBOARD_VALUES.kFactorLaPa)
+  const [printRetractMm, setPrintRetractMm] = useState<number>(DASHBOARD_VALUES.retractMm)
+  const [printProgressOffsetMin, setPrintProgressOffsetMin] = useState<number>(0)
+  const [pauseAtLayer, setPauseAtLayer] = useState<number>(Math.max(1, DASHBOARD_VALUES.layerCurrent + 5))
+  const [temperatureChartMode, setTemperatureChartMode] = useState<TemperatureChartMode>('both')
   const [idleNotesText, setIdleNotesText] = useState<string>(IDLE_NOTES_DEFAULT_TEXT)
   const [activeKeyboardTarget, setActiveKeyboardTarget] = useState<KeyboardTarget | null>(null)
   const [keyboardLanguage, setKeyboardLanguage] = useState<VirtualKeyboardLanguage>('ru')
@@ -444,6 +547,8 @@ function App() {
   const printFill = Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
   const isBusy = pendingCommand !== null
   const hasActivePrint = activePrintFileName !== null
+  const activePrintTuneMeta = activePrintTuneGroup === null ? null : PRINT_TUNE_GROUP_META[activePrintTuneGroup]
+  const isTemperatureTuneGroup = activePrintTuneGroup === 'nozzle' || activePrintTuneGroup === 'bed'
   const isFilesScreenActive = activeScreen === 'files'
   const activeNavIndex = Math.max(
     0,
@@ -466,13 +571,15 @@ function App() {
   const cloudStatusLabel = snapshot.connection === 'online' ? 'В сети' : 'Не в сети'
   const idleNozzleTempLabel = `${rounded(snapshot.extruderTemp)} °C`
   const idleBedTempLabel = `${rounded(snapshot.bedTemp)} °C`
+  const effectiveActivePrintState = hasActivePrint ? (activePrintUiState ?? snapshot.state) : snapshot.state
+  const isPrintPaused = hasActivePrint && statusLabel(effectiveActivePrintState) === 'Пауза'
   const topBarScreenLabel = useMemo(() => {
     if (activeScreen === 'dashboard') {
-      return hasActivePrint ? statusLabel(snapshot.state) : 'Ожидание печати'
+      return hasActivePrint ? statusLabel(effectiveActivePrintState) : 'Ожидание печати'
     }
 
     return BOTTOM_NAV_ITEMS.find((item) => item.id === activeScreen)?.label ?? statusLabel(snapshot.state)
-  }, [activeScreen, hasActivePrint, snapshot.state])
+  }, [activeScreen, effectiveActivePrintState, hasActivePrint, snapshot.state])
   const sortedPrintFiles = useMemo(() => {
     const nextItems = [...filesLibrary]
 
@@ -562,21 +669,27 @@ function App() {
     nozzle: snapshot.extruderTemp,
     bed: snapshot.bedTemp,
   } as const
+  const temperatureTargetByKey = {
+    nozzle: printNozzleTargetTemp,
+    bed: printBedTargetTemp,
+  } as const
 
   const temperatureMetrics = TEMPERATURE_METRIC_DEFINITIONS.map((definition) => {
     const currentValue = temperatureValueByKey[definition.key]
+    const targetValue = temperatureTargetByKey[definition.key]
 
     return {
       ...definition,
+      target: targetValue,
       current: rounded(currentValue),
-      fillPercent: clampPercent(currentValue, definition.target),
+      fillPercent: clampPercent(currentValue, targetValue),
     }
   })
 
   const quickMetricValueByKey = {
-    volumetricFlow: DASHBOARD_VALUES.volumetricFlowMm3S,
-    fan: rounded(snapshot.modelFanPercent),
-    flow: DASHBOARD_VALUES.flowPercent,
+    volumetricFlow: printVolumetricFlowMm3S,
+    fan: printFanPercent,
+    flow: printFlowPercent,
   } as const
 
   const quickMetrics = QUICK_METRIC_DEFINITIONS.map((definition) => ({
@@ -585,16 +698,38 @@ function App() {
   }))
 
   const processMetricValueByKey = {
-    speed: DASHBOARD_VALUES.speedMmS,
-    accel: DASHBOARD_VALUES.accelMmS2,
-    kFactor: DASHBOARD_VALUES.kFactorLaPa,
-    retract: DASHBOARD_VALUES.retractMm,
+    speed: printSpeedMmS,
+    accel: printAccelMmS2,
+    kFactor: printKFactor,
+    retract: printRetractMm,
   } as const
 
   const processMetrics = PROCESS_METRIC_DEFINITIONS.map((definition) => ({
     ...definition,
     value: processMetricValueByKey[definition.key],
   }))
+  const adjustedEtaTime = useMemo(
+    () => shiftTimeLabelByMinutes(DASHBOARD_VALUES.etaTime, printProgressOffsetMin),
+    [printProgressOffsetMin],
+  )
+  const nozzleTrendValues = useMemo(
+    () => Array.from({ length: 24 }, (_, index) => {
+      const ratio = (index + 1) / 24
+      const wave = Math.sin((index / 4.2) + 0.7) * 2.2
+      const projected = snapshot.extruderTemp + ((printNozzleTargetTemp - snapshot.extruderTemp) * ratio)
+      return clampAxisValue(projected + wave, 0, Math.max(printNozzleTargetTemp + 8, 230))
+    }),
+    [printNozzleTargetTemp, snapshot.extruderTemp],
+  )
+  const bedTrendValues = useMemo(
+    () => Array.from({ length: 24 }, (_, index) => {
+      const ratio = (index + 1) / 24
+      const wave = Math.cos((index / 5.1) + 0.4) * 1.6
+      const projected = snapshot.bedTemp + ((printBedTargetTemp - snapshot.bedTemp) * ratio)
+      return clampAxisValue(projected + wave, 0, Math.max(printBedTargetTemp + 6, 90))
+    }),
+    [printBedTargetTemp, snapshot.bedTemp],
+  )
 
   const closeTopPopup = useCallback(() => {
     setActiveTopPopup(null)
@@ -982,6 +1117,7 @@ function App() {
 
     if (activePrintFileName === selectedPrintFile.name) {
       setActivePrintFileName(null)
+      setActivePrintUiState(null)
     }
     setFilesLibrary((currentItems) => currentItems.filter((item) => item.id !== selectedPrintFile.id))
     closeFileModal()
@@ -998,6 +1134,7 @@ function App() {
     })
     if (ok) {
       setActivePrintFileName(selectedPrintFile.name)
+      setActivePrintUiState('printing')
       await refresh()
       setActiveScreen('dashboard')
       closeFileModal()
@@ -1491,8 +1628,10 @@ function App() {
   }
 
   async function handlePause(): Promise<void> {
-    const ok = await executeCommand({ command: 'pause' })
+    const nextCommand = isPrintPaused ? 'resume' : 'pause'
+    const ok = await executeCommand({ command: nextCommand })
     if (ok) {
+      setActivePrintUiState(isPrintPaused ? 'printing' : 'paused')
       await refresh()
     }
   }
@@ -1505,11 +1644,350 @@ function App() {
     const ok = await executeCommand({ command: 'cancel' })
     if (ok) {
       setActivePrintFileName(null)
+      setActivePrintUiState(null)
       await refresh()
       setActiveScreen('dashboard')
       closePrintCancelConfirm()
     }
   }
+
+  function handlePrintTuneGroupOpen(groupId: PrintTuneGroupId): void {
+    if (groupId === 'nozzle') {
+      setTemperatureChartMode('nozzle')
+    } else if (groupId === 'bed') {
+      setTemperatureChartMode('bed')
+    } else {
+      setTemperatureChartMode('both')
+    }
+
+    setActivePrintTuneGroup(groupId)
+  }
+
+  function handlePrintTuneGroupClose(): void {
+    setActivePrintTuneGroup(null)
+    setTemperatureChartMode('both')
+  }
+
+  function handlePrintTuneApply(): void {
+    handlePrintTuneGroupClose()
+  }
+
+  function handlePauseLayerChange(event: ChangeEvent<HTMLInputElement>): void {
+    const parsed = Number(event.target.value)
+    if (Number.isNaN(parsed)) {
+      return
+    }
+
+    const normalized = Math.round(clampAxisValue(parsed, 1, DASHBOARD_VALUES.layerTotal))
+    setPauseAtLayer(normalized)
+  }
+
+  function renderPrintTuneGroupContent(): ReactNode {
+    if (activePrintTuneGroup === null || activePrintTuneMeta === null) {
+      return null
+    }
+
+    if (activePrintTuneGroup === 'nozzle' || activePrintTuneGroup === 'bed') {
+      const temperatureRows = [
+        {
+          id: 'nozzle' as const,
+          sensorLabel: 'Extruder',
+          uiLabel: 'Сопло',
+          tone: 'orange' as const,
+          current: snapshot.extruderTemp,
+          target: printNozzleTargetTemp,
+          onTargetChange: setPrintNozzleTargetTemp,
+          testIdPrefix: 'print-tune-temp-nozzle',
+        },
+        {
+          id: 'bed' as const,
+          sensorLabel: 'Heater Bed',
+          uiLabel: 'Стол',
+          tone: 'green' as const,
+          current: snapshot.bedTemp,
+          target: printBedTargetTemp,
+          onTargetChange: setPrintBedTargetTemp,
+          testIdPrefix: 'print-tune-temp-bed',
+        },
+      ]
+      const chartSeries = [
+        {
+          id: 'nozzle' as const,
+          label: 'Сопло',
+          tone: 'orange' as const,
+          values: nozzleTrendValues,
+          target: printNozzleTargetTemp,
+        },
+        {
+          id: 'bed' as const,
+          label: 'Стол',
+          tone: 'green' as const,
+          values: bedTrendValues,
+          target: printBedTargetTemp,
+        },
+      ].filter((seriesItem) => {
+        if (temperatureChartMode === 'both') {
+          return true
+        }
+        return seriesItem.id === temperatureChartMode
+      })
+
+      return (
+        <div className="print-tune-modal-stack print-tune-modal-stack-temperature">
+          <section className="print-temp-table" aria-label="Параметры температуры">
+            <header className="print-temp-table-head">
+              <span>Датчик</span>
+              <span>Текущая</span>
+              <span>Заданная</span>
+            </header>
+
+            {temperatureRows.map((row) => {
+              const isActiveRow =
+                temperatureChartMode === 'both'
+                  ? row.id === activePrintTuneGroup
+                  : row.id === temperatureChartMode
+
+              return (
+                <div
+                  key={row.id}
+                  className={`print-temp-table-row ${isActiveRow ? 'is-active' : ''}`}
+                >
+                  <div className="print-temp-table-sensor">
+                    <span className={`print-temp-table-marker ${row.tone === 'orange' ? 'is-orange' : 'is-green'}`} />
+                    <div className="print-temp-table-sensor-text">
+                      <strong>{row.sensorLabel}</strong>
+                      <span>{row.uiLabel}</span>
+                    </div>
+                  </div>
+                  <div className="print-temp-table-value">
+                    {rounded(row.current)} <span>°C</span>
+                  </div>
+                  <TuneCompactStepperInput
+                    value={row.target}
+                    min={0}
+                    max={300}
+                    step={5}
+                    unit="°C"
+                    onChange={row.onTargetChange}
+                    inputAriaLabel={`Целевая температура ${row.uiLabel.toLowerCase()}`}
+                    testIdPrefix={row.testIdPrefix}
+                  />
+                </div>
+              )
+            })}
+          </section>
+
+          <div className="print-temp-chart-head">
+            <p className="print-temp-chart-title">Температуры [°C]</p>
+            <TuneModeToggle
+              options={[
+                { id: 'nozzle', label: 'Сопло' },
+                { id: 'bed', label: 'Стол' },
+                { id: 'both', label: 'Общий' },
+              ]}
+              value={temperatureChartMode}
+              onChange={(nextValue) => setTemperatureChartMode(nextValue as TemperatureChartMode)}
+              testIdPrefix="print-tune-temp-chart"
+              layout="compact"
+            />
+          </div>
+
+          <TemperatureTrendChart
+            series={chartSeries}
+            testId={activePrintTuneGroup === 'nozzle' ? 'print-tune-chart-nozzle' : 'print-tune-chart-bed'}
+          />
+        </div>
+      )
+    }
+
+    if (activePrintTuneGroup === 'volumetricFlow') {
+      return (
+        <div className="print-tune-modal-stack">
+          <TuneNumberControl
+            label="Лимит расхода"
+            value={printVolumetricFlowMm3S}
+            min={1}
+            max={30}
+            step={0.1}
+            fractionDigits={1}
+            unit="мм³/с"
+            onChange={setPrintVolumetricFlowMm3S}
+            testIdPrefix="print-tune-volumetric"
+          />
+        </div>
+      )
+    }
+
+    if (activePrintTuneGroup === 'fan') {
+      return (
+        <div className="print-tune-modal-stack">
+          <p className="print-tune-current-row">
+            <span>Текущее значение</span>
+            <strong>{printFanPercent}%</strong>
+          </p>
+          <HorizontalSteppedSlider
+            value={printFanPercent}
+            min={0}
+            max={100}
+            step={5}
+            onChange={(nextValue) => setPrintFanPercent(Math.round(nextValue))}
+            testId="print-tune-fan-slider"
+          />
+        </div>
+      )
+    }
+
+    if (activePrintTuneGroup === 'flow') {
+      return (
+        <div className="print-tune-modal-stack">
+          <p className="print-tune-current-row">
+            <span>Текущее значение</span>
+            <strong>{printFlowPercent}%</strong>
+          </p>
+          <HorizontalSteppedSlider
+            value={printFlowPercent}
+            min={50}
+            max={150}
+            step={1}
+            onChange={(nextValue) => setPrintFlowPercent(Math.round(nextValue))}
+            testId="print-tune-flow-slider"
+          />
+        </div>
+      )
+    }
+
+    if (activePrintTuneGroup === 'speed') {
+      return (
+        <div className="print-tune-modal-stack">
+          <TuneNumberControl
+            label="Скорость печати"
+            value={printSpeedMmS}
+            min={30}
+            max={300}
+            step={5}
+            unit="мм/с"
+            onChange={setPrintSpeedMmS}
+            testIdPrefix="print-tune-speed"
+          />
+        </div>
+      )
+    }
+
+    if (activePrintTuneGroup === 'accel') {
+      return (
+        <div className="print-tune-modal-stack">
+          <TuneNumberControl
+            label="Ускорение"
+            value={printAccelMmS2}
+            min={500}
+            max={12000}
+            step={100}
+            unit="мм/с²"
+            onChange={setPrintAccelMmS2}
+            testIdPrefix="print-tune-accel"
+          />
+        </div>
+      )
+    }
+
+    if (activePrintTuneGroup === 'kFactor') {
+      return (
+        <div className="print-tune-modal-stack">
+          <TuneNumberControl
+            label="K-factor"
+            value={printKFactor}
+            min={0}
+            max={0.2}
+            step={0.005}
+            fractionDigits={3}
+            onChange={setPrintKFactor}
+            testIdPrefix="print-tune-kfactor"
+          />
+        </div>
+      )
+    }
+
+    if (activePrintTuneGroup === 'retract') {
+      return (
+        <div className="print-tune-modal-stack">
+          <TuneNumberControl
+            label="Откат"
+            value={printRetractMm}
+            min={0}
+            max={8}
+            step={0.1}
+            fractionDigits={1}
+            unit="мм"
+            onChange={setPrintRetractMm}
+            testIdPrefix="print-tune-retract"
+          />
+        </div>
+      )
+    }
+
+    if (activePrintTuneGroup === 'progress') {
+      return (
+        <div className="print-tune-modal-stack">
+          <p className="print-tune-current-row">
+            <span>Прогресс</span>
+            <strong>{DASHBOARD_VALUES.progressPercent}%</strong>
+          </p>
+          <p className="print-tune-current-row">
+            <span>Расчётное завершение</span>
+            <strong>{adjustedEtaTime}</strong>
+          </p>
+          <TuneNumberControl
+            label="Коррекция времени завершения"
+            value={printProgressOffsetMin}
+            min={-180}
+            max={180}
+            step={1}
+            unit="мин"
+            onChange={setPrintProgressOffsetMin}
+            testIdPrefix="print-tune-progress-offset"
+          />
+        </div>
+      )
+    }
+
+    return (
+      <div className="print-tune-modal-stack">
+        <p className="print-tune-current-row">
+          <span>Текущий слой</span>
+          <strong>{DASHBOARD_VALUES.layerCurrent} / {DASHBOARD_VALUES.layerTotal}</strong>
+        </p>
+        <label className="print-tune-input-wrap print-tune-input-wrap-layer">
+          <span>Пауза на слое</span>
+          <input
+            type="number"
+            className="print-tune-input"
+            value={pauseAtLayer}
+            min={1}
+            max={DASHBOARD_VALUES.layerTotal}
+            step={1}
+            onChange={handlePauseLayerChange}
+            data-testid="print-tune-layer-pause-input"
+          />
+        </label>
+      </div>
+    )
+  }
+
+  useEffect(() => {
+    if (!hasActivePrint && activePrintTuneGroup !== null) {
+      setActivePrintTuneGroup(null)
+    }
+  }, [activePrintTuneGroup, hasActivePrint])
+
+  useEffect(() => {
+    if (!hasActivePrint || activePrintUiState === null) {
+      return
+    }
+
+    if (snapshot.state.toLowerCase() === activePrintUiState) {
+      setActivePrintUiState(null)
+    }
+  }, [activePrintUiState, hasActivePrint, snapshot.state])
 
   useEffect(() => () => {
     if (bedScrewMoveTimeoutRef.current !== null) {
@@ -1558,27 +2036,43 @@ function App() {
                 <div className="job-info">
                   <p className="job-name">{activePrintFileName ?? DASHBOARD_VALUES.fileName}</p>
 
-                  <div className="job-metrics">
-                    <div>
-                      <p className="label">Прогресс</p>
-                      <p className="job-main-value">{DASHBOARD_VALUES.progressPercent}%</p>
+                  <button
+                    type="button"
+                    className="print-tune-hitbox print-tune-hitbox-progress"
+                    onClick={() => handlePrintTuneGroupOpen('progress')}
+                    aria-label="Открыть параметры прогресса печати"
+                    data-testid="print-tune-group-progress"
+                  >
+                    <div className="job-metrics">
+                      <div>
+                        <p className="label">Прогресс</p>
+                        <p className="job-main-value">{DASHBOARD_VALUES.progressPercent}%</p>
+                      </div>
+                      <div className="job-metrics-right">
+                        <p className="label">Конец</p>
+                        <p className="job-main-value">{adjustedEtaTime}</p>
+                      </div>
                     </div>
-                    <div className="job-metrics-right">
-                      <p className="label">Конец</p>
-                      <p className="job-main-value">{DASHBOARD_VALUES.etaTime}</p>
+
+                    <div className="job-meter">
+                      <div className="job-meter-fill" style={{ width: `${printFill}%` }} />
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="job-meter">
-                    <div className="job-meter-fill" style={{ width: `${printFill}%` }} />
-                  </div>
-
-                  <div className="job-layer-row">
-                    <span className="label">Слой</span>
-                    <strong>
-                      {DASHBOARD_VALUES.layerCurrent} / {DASHBOARD_VALUES.layerTotal}
-                    </strong>
-                  </div>
+                  <button
+                    type="button"
+                    className="print-tune-hitbox print-tune-hitbox-layer"
+                    onClick={() => handlePrintTuneGroupOpen('layers')}
+                    aria-label="Открыть параметры слоя"
+                    data-testid="print-tune-group-layers"
+                  >
+                    <div className="job-layer-row">
+                      <span className="label">Слой</span>
+                      <strong>
+                        {DASHBOARD_VALUES.layerCurrent} / {DASHBOARD_VALUES.layerTotal}
+                      </strong>
+                    </div>
+                  </button>
                 </div>
               </section>
 
@@ -1587,34 +2081,58 @@ function App() {
                   <article className="stats-card">
                     <div className="temp-grid">
                       {temperatureMetrics.map((metric) => (
-                        <TemperatureMetric
+                        <button
                           key={metric.label}
-                          label={metric.label}
-                          current={metric.current}
-                          target={metric.target}
-                          meterTone={metric.meterTone}
-                          fillPercent={metric.fillPercent}
-                        />
+                          type="button"
+                          className="print-tune-hitbox print-tune-hitbox-metric"
+                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
+                          aria-label={`Открыть параметры: ${metric.label}`}
+                          data-testid={`print-tune-group-${metric.key}`}
+                        >
+                          <TemperatureMetric
+                            label={metric.label}
+                            current={metric.current}
+                            target={metric.target}
+                            meterTone={metric.meterTone}
+                            fillPercent={metric.fillPercent}
+                          />
+                        </button>
                       ))}
                     </div>
 
                     <div className="three-up-grid">
                       {quickMetrics.map((metric) => (
-                        <PlainMetric
+                        <button
                           key={metric.label}
-                          label={metric.label}
-                          value={metric.value}
-                          unit={metric.unit}
-                          valueClassName={metric.valueClassName}
-                        />
+                          type="button"
+                          className="print-tune-hitbox print-tune-hitbox-metric"
+                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
+                          aria-label={`Открыть параметры: ${metric.label}`}
+                          data-testid={`print-tune-group-${metric.key}`}
+                        >
+                          <PlainMetric
+                            label={metric.label}
+                            value={metric.value}
+                            unit={metric.unit}
+                            valueClassName={metric.valueClassName}
+                          />
+                        </button>
                       ))}
                     </div>
                   </article>
 
                   <div className="action-stack" role="group" aria-label="действия печати">
                     <ActionSquareButton
-                      icon="actionPause"
-                      label={pendingCommand === 'pause' ? 'Пауза...' : 'Пауза'}
+                      icon={isPrintPaused || pendingCommand === 'resume' ? 'actionResume' : 'actionPause'}
+                      label={
+                        pendingCommand === 'pause'
+                          ? 'Пауза...'
+                          : pendingCommand === 'resume'
+                            ? 'Продолжение...'
+                            : isPrintPaused
+                              ? 'Продолжить'
+                              : 'Пауза'
+                      }
                       onClick={() => void handlePause()}
                       disabled={isBusy}
                     />
@@ -1632,13 +2150,21 @@ function App() {
                   <article className="process-card">
                     <div className="process-grid">
                       {processMetrics.map((metric) => (
-                        <PlainMetric
+                        <button
                           key={metric.label}
-                          label={metric.label}
-                          value={metric.value}
-                          unit={metric.unit}
-                          valueClassName="process-value"
-                        />
+                          type="button"
+                          className="print-tune-hitbox print-tune-hitbox-metric"
+                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
+                          aria-label={`Открыть параметры: ${metric.label}`}
+                          data-testid={`print-tune-group-${metric.key}`}
+                        >
+                          <PlainMetric
+                            label={metric.label}
+                            value={metric.value}
+                            unit={metric.unit}
+                            valueClassName="process-value"
+                          />
+                        </button>
                       ))}
                     </div>
                   </article>
@@ -2879,6 +3405,71 @@ function App() {
                 previewTestId={keyboardDialogPreviewTestId}
               />
             </div>
+          </div>
+        ) : null}
+
+        {activePrintTuneMeta !== null ? (
+          <div
+            className="print-tune-modal-layer"
+            role="presentation"
+            onClick={handlePrintTuneGroupClose}
+            data-testid="print-tune-modal-layer"
+          >
+            <section
+              className={`print-tune-modal-dialog ${isTemperatureTuneGroup ? 'is-temperature' : 'is-compact'}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={PRINT_TUNE_MODAL_TITLE_ID}
+              data-testid="print-tune-modal"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header className="print-cancel-modal-head">
+                <h2 id={PRINT_TUNE_MODAL_TITLE_ID}>{activePrintTuneMeta.label}</h2>
+                <div className="print-tune-modal-head-actions">
+                  {isTemperatureTuneGroup ? (
+                    <button
+                      type="button"
+                      className="settings-network-btn settings-network-btn-primary print-tune-modal-head-save"
+                      onClick={handlePrintTuneApply}
+                      data-testid="print-tune-modal-apply-button"
+                    >
+                      Сохранить
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="print-cancel-modal-close"
+                    aria-label={`Закрыть окно параметра: ${activePrintTuneMeta.label}`}
+                    onClick={handlePrintTuneGroupClose}
+                  >
+                    ×
+                  </button>
+                </div>
+              </header>
+
+              {renderPrintTuneGroupContent()}
+
+              {isTemperatureTuneGroup ? null : (
+                <div className="print-tune-modal-actions">
+                  <button
+                    type="button"
+                    className="settings-network-btn"
+                    onClick={handlePrintTuneGroupClose}
+                    data-testid="print-tune-modal-close-button"
+                  >
+                    Закрыть
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-network-btn settings-network-btn-primary"
+                    onClick={handlePrintTuneApply}
+                    data-testid="print-tune-modal-apply-button"
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              )}
+            </section>
           </div>
         ) : null}
 

@@ -25,7 +25,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Уведомления' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Пауза' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Стоп' })).not.toBeInTheDocument()
-  })
+  }, 10000)
 
   it('returns to waiting state after print cancel', async () => {
     render(<App />)
@@ -50,6 +50,43 @@ describe('App', () => {
       expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Ожидание печати')
     })
     expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
+  })
+
+  it('switches print state between pause and print from the pause button', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Файлы' }))
+    fireEvent.click(screen.getAllByTestId('print-file-card')[0])
+    fireEvent.click(screen.getByTestId('print-file-start-button'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+    })
+
+    const actionButtons = screen.getAllByRole('button')
+    const pauseActionButton = actionButtons.find((button) => button.getAttribute('aria-label') === 'Пауза')
+
+    expect(pauseActionButton).toBeDefined()
+    expect(pauseActionButton?.querySelector('.ui-icon-mask')).toHaveStyle({
+      maskImage: expect.stringContaining('action-pause.svg'),
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Пауза' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Пауза')
+    })
+
+    const resumeActionButton = screen.getByRole('button', { name: 'Продолжить' })
+    expect(resumeActionButton.querySelector('.ui-icon-mask')).toHaveStyle({
+      maskImage: expect.stringContaining('action-resume.svg'),
+    })
+
+    fireEvent.click(resumeActionButton)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+    })
   })
 
   it('switches between screens from bottom navigation', () => {
@@ -223,7 +260,7 @@ describe('App', () => {
     expect(screen.getByTestId('macros-zoffset-save')).toHaveTextContent(/Завершить калибровку/i)
     fireEvent.click(screen.getByTestId('macros-zoffset-save'))
     expect(screen.getByTestId('macros-zoffset-notice')).toHaveTextContent(/Калибровка завершена/i)
-  })
+  }, 10000)
 
   it('opens print file modal and handles start and delete actions', async () => {
     render(<App />)

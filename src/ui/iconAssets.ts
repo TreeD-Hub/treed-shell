@@ -1,4 +1,5 @@
 import actionPause from '../assets/icons/action-pause.svg'
+import actionResume from '../assets/icons/action-resume.svg'
 import actionStopCritical from '../assets/icons/action-stop-critical.svg'
 import menuControl from '../assets/icons/menu-control.svg'
 import menuDashboard from '../assets/icons/menu-dashboard.svg'
@@ -16,6 +17,7 @@ import statusWifi from '../assets/icons/status-wifi.svg'
 
 export const UI_ICON_ASSETS = {
   actionPause,
+  actionResume,
   actionStopCritical,
   menuControl,
   menuDashboard,

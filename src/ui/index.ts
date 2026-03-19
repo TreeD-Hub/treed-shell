@@ -12,6 +12,7 @@ export {
   type JoystickVector,
 } from './controlWidgets'
 export { PlainMetric, TemperatureMetric } from './metrics'
+export { TemperatureTrendChart, TuneCompactStepperInput, TuneModeToggle, TuneNumberControl } from './printTuneWidgets'
 export { PrintFileCard } from './printFileCard'
 export {
   SettingsInfoCard,
