@@ -1,6 +1,6 @@
 @font-face {
-  font-family: 'Web IBM MDA';
-  src: url('/fonts/web_ibm_mda.ttf') format('truetype');
+  font-family: 'Nothing Font';
+  src: url('/fonts/nothing-font.otf') format('opentype');
   font-display: swap;
 }
 
@@ -50,10 +50,10 @@
   --font-size-small: 14px;
   --font-size-tiny: 12px;
 
-  --font-weight-medium: 400;
-  --font-weight-regular: 400;
+  --font-weight-medium: 300;
+  --font-weight-regular: 300;
 
-  --font-family-ui: 'Cascadia Mono', 'Consolas', 'Courier New', monospace;
+  --font-family-ui: 'Nothing Font', 'Cascadia Mono', 'Consolas', 'Courier New', monospace;
 
   /* 00_Foundation: grid */
   --grid-base: 8px;

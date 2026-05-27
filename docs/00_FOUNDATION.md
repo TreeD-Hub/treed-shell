@@ -67,7 +67,7 @@
 - `Tiny` (Meta info): `12px / 400`
 
 Шрифтовой контракт:
-- базовый UI: моноширинный системный стек `Cascadia Mono / Consolas / Courier New`;
+- базовый UI: `Web IBM MDA` с fallback-стеком `Cascadia Mono / Consolas / Courier New`;
 - крупные брендовые/навигационные надписи: CSS dot-matrix эффект через text clip;
 - мелкие метрики и поля ввода остаются читаемыми моноширинными, без чрезмерного dot-clip.
 

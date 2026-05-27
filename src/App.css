@@ -2251,7 +2251,7 @@ body {
   border-color: transparent;
   background: transparent;
   color: var(--color-primary-light);
-  text-shadow: 0 0 12px var(--color-primary-surface);
+  text-shadow: none;
 }
 
 .segmented-toggle-btn:hover,
@@ -2791,7 +2791,7 @@ body {
   border-color: transparent;
   background: transparent;
   color: var(--color-primary-light);
-  text-shadow: 0 0 12px var(--color-primary-surface);
+  text-shadow: none;
 }
 
 .files-sort-btn:hover,
@@ -4363,7 +4363,7 @@ body {
   border-color: transparent;
   background: transparent;
   color: var(--color-primary-light);
-  text-shadow: 0 0 12px var(--color-primary-surface);
+  text-shadow: none;
 }
 
 .step-btn:hover,
@@ -4469,7 +4469,7 @@ body {
 }
 
 .nav-item.is-active span:last-child {
-  text-shadow: 0 0 12px var(--color-primary-surface);
+  text-shadow: none;
 }
 
 /* Блок: Nothing terminal skin поверх существующей структуры экранов. */
@@ -4524,7 +4524,7 @@ select {
 
 .brand-wrap h1 {
   color: var(--color-text-primary);
-  text-shadow: 0 0 9px rgba(244, 244, 240, 0.22);
+  text-shadow: none;
 }
 
 .print-state {
@@ -4731,7 +4731,7 @@ select {
 .print-temp-keyboard-display,
 .joystick-readout {
   color: var(--color-text-primary);
-  text-shadow: 0 0 8px rgba(244, 244, 240, 0.12);
+  text-shadow: none;
 }
 
 .meter,
@@ -4960,7 +4960,7 @@ select {
 .brand-wrap h1 {
   font-size: 32px;
   font-weight: var(--font-weight-regular);
-  text-shadow: 0 0 8px rgba(244, 244, 240, 0.18);
+  text-shadow: none;
 }
 
 .print-state {
@@ -5055,7 +5055,7 @@ select {
   font-size: 28px;
   line-height: 1.16;
   text-transform: uppercase;
-  text-shadow: 0 0 8px rgba(244, 244, 240, 0.16);
+  text-shadow: none;
 }
 
 .dashboard-idle-sidebar {
@@ -5183,25 +5183,6 @@ select {
     linear-gradient(180deg, rgba(244, 244, 240, 0.11), rgba(244, 244, 240, 0.035)),
     rgba(244, 244, 240, 0.025);
   color: var(--color-text-primary);
-}
-
-/* Блок: dot-matrix типографика из референса. */
-.brand-wrap h1,
-.dashboard-idle-title,
-.nav-item span:last-child {
-  --dot-text-color: var(--color-text-primary);
-  background-image: radial-gradient(circle, var(--dot-text-color) 0 1.35px, transparent 1.46px);
-  background-size: 3.2px 3.2px;
-  background-position: 0 0;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  text-shadow: none;
-}
-
-.nav-item span:last-child {
-  --dot-text-color: rgba(244, 244, 240, 0.92);
 }
 
 .print-state::before,
