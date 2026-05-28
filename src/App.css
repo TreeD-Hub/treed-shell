@@ -2068,14 +2068,6 @@ body {
   align-self: stretch;
 }
 
-.control-side-top {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-sm);
-  align-items: stretch;
-}
-
 .control-card {
   min-height: 0;
   border-radius: 10px;
@@ -2102,11 +2094,6 @@ body {
   padding: var(--space-sm);
   gap: var(--space-xs);
   align-content: start;
-}
-
-.control-card-parking,
-.control-card-service {
-  height: 100%;
 }
 
 .control-parking-targets {
@@ -2142,31 +2129,28 @@ body {
 }
 
 .control-card-parking .control-action-btn,
-.control-card-service .control-service-btn {
+.control-card-parking .control-service-btn {
   min-height: 44px;
   font-size: var(--font-size-body);
 }
 
 .control-card-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
   min-width: 0;
 }
 
-.control-card-kicker,
 .control-card-state {
   margin: 0;
   font-size: var(--font-size-body);
   line-height: 1;
   color: var(--color-text-soft);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .control-card-title {
-  margin: var(--space-xxs) 0 0;
+  margin: 0;
   font-size: var(--layout-block-label-size);
   line-height: 1.15;
   font-weight: var(--font-weight-medium);
@@ -2174,7 +2158,6 @@ body {
 }
 
 .control-card-state {
-  padding: 3px 0 0;
   color: var(--color-text-secondary);
   max-width: 48%;
   overflow: hidden;
@@ -2190,13 +2173,6 @@ body {
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
   white-space: nowrap;
-}
-
-.control-card-hint {
-  margin: 0;
-  font-size: var(--font-size-body);
-  line-height: 1.25;
-  color: var(--color-text-secondary);
 }
 
 .control-action-btn,
@@ -2229,12 +2205,14 @@ body {
 }
 
 .control-action-btn:active,
+.control-target-btn:active,
 .control-service-btn:active,
 .axis-cross-btn:active {
   transform: translateY(1px);
 }
 
 .control-action-btn:disabled,
+.control-target-btn:disabled,
 .control-service-btn:disabled,
 .axis-cross-btn:disabled {
   opacity: 0.72;
@@ -2308,7 +2286,7 @@ body {
 .axis-cross-layout {
   display: grid;
   width: 100%;
-  grid-template-columns: max-content max-content;
+  grid-template-columns: repeat(3, max-content);
   justify-content: center;
   gap: 20px;
   align-items: start;
@@ -2323,6 +2301,10 @@ body {
 
 .axis-cross-group-z {
   justify-items: center;
+}
+
+.axis-cross-group-filament {
+  margin-left: 10px;
 }
 
 .axis-cross-title {
@@ -2378,6 +2360,11 @@ body {
   position: absolute;
   bottom: 0;
   left: 0;
+}
+
+.axis-cross-filament {
+  display: grid;
+  gap: 12px;
 }
 
 .axis-cross-btn {
@@ -5487,16 +5474,12 @@ select {
     height: auto;
   }
 
-  .control-side-top {
-    grid-template-columns: 1fr;
-  }
-
   .control-card-motion {
     height: auto;
   }
 
   .axis-cross-layout {
-    grid-template-columns: max-content max-content;
+    grid-template-columns: repeat(3, max-content);
     justify-content: center;
   }
 
@@ -5514,6 +5497,10 @@ select {
     width: 44px;
     height: 44px;
     min-height: 44px;
+  }
+
+  .axis-cross-group-filament {
+    margin-left: 6px;
   }
 
   .axis-cross-xy > button:nth-of-type(1),

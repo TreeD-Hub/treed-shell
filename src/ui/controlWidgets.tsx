@@ -66,12 +66,14 @@ export function SegmentedToggle<T extends string>({
 
 type AxisCrossControlsProps = {
   onMove: (axis: AxisId, direction: -1 | 1) => void
+  onFilamentMove?: (direction: -1 | 1) => void
   disabled?: boolean
   className?: string
 }
 
 export function AxisCrossControls({
   onMove,
+  onFilamentMove,
   disabled = false,
   className,
 }: AxisCrossControlsProps) {
@@ -144,6 +146,30 @@ export function AxisCrossControls({
             className="axis-cross-btn"
             aria-label="Сдвиг Z в минус"
             onClick={() => onMove('Z', -1)}
+            disabled={disabled}
+          >
+            ↓
+          </button>
+        </div>
+      </div>
+
+      <div className="axis-cross-group axis-cross-group-filament">
+        <p className="axis-cross-title">Филамент</p>
+        <div className="axis-cross-filament">
+          <button
+            type="button"
+            className="axis-cross-btn"
+            aria-label="Загрузить филамент"
+            onClick={() => onFilamentMove?.(1)}
+            disabled={disabled}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="axis-cross-btn"
+            aria-label="Выгрузить филамент"
+            onClick={() => onFilamentMove?.(-1)}
             disabled={disabled}
           >
             ↓

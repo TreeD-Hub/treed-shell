@@ -543,7 +543,7 @@ function App() {
   const [parkingAxis, setParkingAxis] = useState<AxisId>('X')
   const [movementMode, setMovementMode] = useState<MovementMode>('buttons')
   const [moveStepKey, setMoveStepKey] = useState<MoveStepKey>('1')
-  const [isServiceModeEnabled, setIsServiceModeEnabled] = useState<boolean>(false)
+  const [activeControlFlashKey, setActiveControlFlashKey] = useState<string | null>(null)
   const [modelFanPercent, setModelFanPercent] = useState<number>(() => (
     snapValueByStep(snapshot.modelFanPercent, MODEL_FAN_BOUNDS_PERCENT.min, MODEL_FAN_BOUNDS_PERCENT.max, MODEL_FAN_STEP_PERCENT)
   ))
@@ -560,6 +560,7 @@ function App() {
   const wifiPasswordInputRef = useRef<HTMLInputElement | null>(null)
   const consoleInputRef = useRef<HTMLTextAreaElement | null>(null)
   const bedScrewMoveTimeoutRef = useRef<number | null>(null)
+  const controlFlashTimeoutRef = useRef<number | null>(null)
 
   const printFill = Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
   const isBusy = pendingCommand !== null
@@ -687,6 +688,14 @@ function App() {
     ? 'settings-wifi-search-keyboard-preview'
     : keyboardPreviewTestId
 
+  useEffect(() => {
+    return () => {
+      if (controlFlashTimeoutRef.current !== null) {
+        window.clearTimeout(controlFlashTimeoutRef.current)
+      }
+    }
+  }, [])
+
   const temperatureValueByKey = {
     nozzle: snapshot.extruderTemp,
     bed: snapshot.bedTemp,
@@ -811,14 +820,6 @@ function App() {
     }
 
     setFilesSortKey(nextSortKey)
-  }
-
-  function handleParkingModeChange(nextMode: ParkingMode): void {
-    setParkingMode(nextMode)
-  }
-
-  function handleParkingAxisChange(nextAxis: AxisId): void {
-    setParkingAxis(nextAxis)
   }
 
   function handleMoveStepChange(nextStep: MoveStepKey): void {
@@ -1133,7 +1134,15 @@ function App() {
     }
   }
 
-  async function handleParkingCommand(): Promise<void> {
+  async function handleParkingTargetSelect(nextMode: ParkingMode, nextAxis?: AxisId): Promise<void> {
+    const resolvedAxis = nextMode === 'axis' ? (nextAxis ?? parkingAxis) : parkingAxis
+
+    setParkingMode(nextMode)
+    if (nextMode === 'axis') {
+      setParkingAxis(resolvedAxis)
+    }
+    flashControlAction(nextMode === 'all' ? 'parking-all' : `parking-${resolvedAxis}`)
+
     const ok = await executeCommand({ command: 'home' })
     if (!ok) {
       return
@@ -1141,15 +1150,15 @@ function App() {
 
     await refresh()
     setPrintHeadPosition((prevPosition) => {
-      if (parkingMode === 'all') {
+      if (nextMode === 'all') {
         return { ...prevPosition, x: 0, y: 0, z: 0 }
       }
 
-      if (parkingAxis === 'X') {
+      if (resolvedAxis === 'X') {
         return { ...prevPosition, x: 0 }
       }
 
-      if (parkingAxis === 'Y') {
+      if (resolvedAxis === 'Y') {
         return { ...prevPosition, y: 0 }
       }
 
@@ -1158,7 +1167,7 @@ function App() {
   }
 
   function handleServiceModeToggle(): void {
-    setIsServiceModeEnabled((prevValue) => !prevValue)
+    flashControlAction('service-mode')
   }
 
   function handleAxisMove(axis: AxisId, direction: -1 | 1): void {
@@ -1177,6 +1186,23 @@ function App() {
           : prevPosition.z,
       }
     })
+  }
+
+  function handleFilamentMove(_direction: -1 | 1): void {
+    // Команды загрузки и выгрузки филамента будут подключены после интеграции backend.
+  }
+
+  function flashControlAction(nextKey: string): void {
+    setActiveControlFlashKey(nextKey)
+
+    if (controlFlashTimeoutRef.current !== null) {
+      window.clearTimeout(controlFlashTimeoutRef.current)
+    }
+
+    controlFlashTimeoutRef.current = window.setTimeout(() => {
+      setActiveControlFlashKey((currentKey) => (currentKey === nextKey ? null : currentKey))
+      controlFlashTimeoutRef.current = null
+    }, 1000)
   }
 
   function handleJoystickVectorChange(nextVector: JoystickVector): void {
@@ -2805,94 +2831,62 @@ function App() {
               <div className="control-scroll-area">
                 <div className="control-grid">
                   <div className="control-side-stack">
-                    <div className="control-side-top">
-                      <article className="control-card control-card-parking">
-                        <div className="control-card-head">
-                          <div>
-                            <p className="control-card-kicker">HOME</p>
-                            <h3 className="control-card-title">Парковка</h3>
-                          </div>
-                          <p className="control-card-state">{parkingMode === 'all' ? 'Все оси' : parkingAxis}</p>
-                        </div>
-                        <div className="control-parking-targets" role="group" aria-label="Цель парковки">
+                    <article className="control-card control-card-parking">
+                      <div className="control-card-head">
+                        <h3 className="control-card-title">Парковка</h3>
+                        {pendingCommand === 'home' ? (
+                          <p className="control-card-state">Парковка...</p>
+                        ) : null}
+                      </div>
+                      <div className="control-parking-targets" role="group" aria-label="Цель парковки">
+                        <button
+                          type="button"
+                          className={`control-target-btn ${activeControlFlashKey === 'parking-all' ? 'is-active' : ''}`}
+                          aria-pressed={activeControlFlashKey === 'parking-all'}
+                          data-testid="parking-mode-all"
+                          onClick={() => void handleParkingTargetSelect('all')}
+                          disabled={isBusy}
+                        >
+                          ALL
+                        </button>
+                        {PARKING_AXIS_OPTIONS.map((option) => (
                           <button
+                            key={option.id}
                             type="button"
-                            className={`control-target-btn ${parkingMode === 'all' ? 'is-active' : ''}`}
-                            aria-pressed={parkingMode === 'all'}
-                            data-testid="parking-mode-all"
-                            onClick={() => handleParkingModeChange('all')}
+                            className={`control-target-btn ${activeControlFlashKey === `parking-${option.id}` ? 'is-active' : ''}`}
+                            aria-pressed={activeControlFlashKey === `parking-${option.id}`}
+                            data-testid={`parking-axis-${option.id}`}
+                            onClick={() => void handleParkingTargetSelect('axis', option.id)}
+                            disabled={isBusy}
                           >
-                            ALL
+                            {option.label}
                           </button>
-                          {PARKING_AXIS_OPTIONS.map((option) => (
-                            <button
-                              key={option.id}
-                              type="button"
-                              className={`control-target-btn ${parkingMode === 'axis' && parkingAxis === option.id ? 'is-active' : ''}`}
-                              aria-pressed={parkingMode === 'axis' && parkingAxis === option.id}
-                              data-testid={`parking-axis-${option.id}`}
-                              onClick={() => {
-                                handleParkingModeChange('axis')
-                                handleParkingAxisChange(option.id)
-                              }}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          className="control-action-btn"
-                          data-testid="parking-action-button"
-                          onClick={() => void handleParkingCommand()}
-                          disabled={isBusy}
-                        >
-                          {pendingCommand === 'home'
-                            ? 'Парковка...'
-                            : parkingMode === 'all'
-                              ? 'Парковка по всем осям'
-                              : `Парковка оси ${parkingAxis}`}
-                        </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="control-service-btn"
+                        data-testid="service-mode-button"
+                        aria-pressed={activeControlFlashKey === 'service-mode'}
+                        onClick={handleServiceModeToggle}
+                      >
+                        Сервисный режим
+                      </button>
 
-                        <button
-                          type="button"
-                          className="control-action-btn control-action-btn-danger"
-                          data-testid="motors-disable-button"
-                          onClick={handleMotorsDisable}
-                          disabled={isBusy}
-                        >
-                          Отключить моторы
-                        </button>
-                      </article>
-
-                      <article className="control-card control-card-service">
-                        <div className="control-card-head">
-                          <div>
-                            <p className="control-card-kicker">SERVICE</p>
-                            <h3 className="control-card-title">Сервисный режим</h3>
-                          </div>
-                          <p className="control-card-state">{isServiceModeEnabled ? 'Вкл' : 'Выкл'}</p>
-                        </div>
-                        <button
-                          type="button"
-                          className="control-service-btn"
-                          data-testid="service-mode-button"
-                          aria-pressed={isServiceModeEnabled}
-                          aria-label={isServiceModeEnabled ? 'Выключить сервисный режим' : 'Включить сервисный режим'}
-                          onClick={handleServiceModeToggle}
-                        >
-                          {isServiceModeEnabled ? 'Выключить' : 'Включить'}
-                        </button>
-                        <p className="control-card-hint">Используйте только во время обслуживания принтера.</p>
-                      </article>
-                    </div>
+                      <button
+                        type="button"
+                        className="control-action-btn control-action-btn-danger"
+                        data-testid="motors-disable-button"
+                        onClick={handleMotorsDisable}
+                        disabled={isBusy}
+                      >
+                        Отключить моторы
+                      </button>
+                    </article>
 
                     <article className="control-card control-card-fan">
                       <div className="control-card-head">
-                        <div>
-                          <p className="control-card-kicker">FAN</p>
-                          <h3 className="control-card-title">Обдув</h3>
-                        </div>
+                        <h3 className="control-card-title">Обдув</h3>
                         <p className="control-card-value">{modelFanPercent}%</p>
                       </div>
                       <HorizontalSteppedSlider
@@ -2909,10 +2903,7 @@ function App() {
 
                   <article className="control-card control-card-motion">
                     <div className="control-card-head">
-                      <div>
-                        <p className="control-card-kicker">MOVE</p>
-                        <h3 className="control-card-title">Оси</h3>
-                      </div>
+                      <h3 className="control-card-title">Оси</h3>
                       <p className="control-card-state">{movementMode === 'buttons' ? `${moveStepKey} мм` : 'Джойстик'}</p>
                     </div>
                     <SegmentedToggle
@@ -2937,6 +2928,7 @@ function App() {
                         <div className="control-cross-wrap">
                           <AxisCrossControls
                             onMove={handleAxisMove}
+                            onFilamentMove={handleFilamentMove}
                             disabled={isBusy}
                           />
                         </div>

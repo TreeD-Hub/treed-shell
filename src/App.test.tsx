@@ -147,7 +147,7 @@ describe('App', () => {
     expect(screen.getByText('34 г')).toBeInTheDocument()
   })
 
-  it('renders control widgets and switches parking mode to specific axis', () => {
+  it('renders control widgets and switches parking mode to specific axis', async () => {
     render(<App />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
@@ -155,24 +155,37 @@ describe('App', () => {
     expect(screen.getByTestId('screen-control')).toBeInTheDocument()
     expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Управление')
     expect(screen.getByRole('heading', { name: 'Парковка' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Сервисный режим' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Сервисный режим' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Обдув' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Оси' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Парковка по всем осям' })).toBeInTheDocument()
+    expect(screen.queryByTestId('parking-action-button')).not.toBeInTheDocument()
+    expect(screen.getByTestId('service-mode-button')).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'Отключить моторы' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Загрузить филамент' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Выгрузить филамент' })).toBeInTheDocument()
     expect(screen.getByTestId('model-fan-slider')).toBeInTheDocument()
 
     const parkingAllButton = screen.getByTestId('parking-mode-all')
     const parkingAxisXButton = screen.getByTestId('parking-axis-X')
 
-    expect(parkingAllButton).toHaveAttribute('aria-pressed', 'true')
+    expect(parkingAllButton).toHaveAttribute('aria-pressed', 'false')
     expect(parkingAxisXButton).toHaveAttribute('aria-pressed', 'false')
 
     fireEvent.click(parkingAxisXButton)
 
     expect(parkingAllButton).toHaveAttribute('aria-pressed', 'false')
     expect(parkingAxisXButton).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Парковка оси X' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Парковка оси X' })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(parkingAxisXButton).toHaveAttribute('aria-pressed', 'false')
+    }, { timeout: 1500 })
+
+    const serviceModeButton = screen.getByTestId('service-mode-button')
+    fireEvent.click(serviceModeButton)
+    expect(serviceModeButton).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => {
+      expect(serviceModeButton).toHaveAttribute('aria-pressed', 'false')
+    }, { timeout: 1500 })
 
     const moveButtonsMode = screen.getByTestId('move-mode-buttons')
     const moveJoystickMode = screen.getByTestId('move-mode-joystick')
