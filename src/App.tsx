@@ -2447,7 +2447,7 @@ function App() {
           </div>
         </header>
 
-        <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''}`}>
+        <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''} ${activeScreen === 'control' ? 'is-control-active' : ''}`}>
           {activeScreen === 'dashboard' ? (
             hasActivePrint ? (
               <>
@@ -2803,31 +2803,43 @@ function App() {
           ) : activeScreen === 'control' ? (
             <section className="control-screen" data-testid="screen-control">
               <div className="control-scroll-area">
-                <header className="control-screen-head">
-                  <p className="control-screen-note">Парковка, сервисный режим и ручное перемещение осей.</p>
-                </header>
-
                 <div className="control-grid">
                   <div className="control-side-stack">
                     <div className="control-side-top">
                       <article className="control-card control-card-parking">
-                        <h3 className="control-card-title">Парковка</h3>
-                        <SegmentedToggle
-                          options={PARKING_MODE_OPTIONS}
-                          value={parkingMode}
-                          onChange={handleParkingModeChange}
-                          ariaLabel="Режим парковки"
-                          testIdPrefix="parking-mode"
-                        />
-                        {parkingMode === 'axis' ? (
-                          <SegmentedToggle
-                            options={PARKING_AXIS_OPTIONS}
-                            value={parkingAxis}
-                            onChange={handleParkingAxisChange}
-                            ariaLabel="Выбор оси парковки"
-                            testIdPrefix="parking-axis"
-                          />
-                        ) : null}
+                        <div className="control-card-head">
+                          <div>
+                            <p className="control-card-kicker">HOME</p>
+                            <h3 className="control-card-title">Парковка</h3>
+                          </div>
+                          <p className="control-card-state">{parkingMode === 'all' ? 'Все оси' : parkingAxis}</p>
+                        </div>
+                        <div className="control-parking-targets" role="group" aria-label="Цель парковки">
+                          <button
+                            type="button"
+                            className={`control-target-btn ${parkingMode === 'all' ? 'is-active' : ''}`}
+                            aria-pressed={parkingMode === 'all'}
+                            data-testid="parking-mode-all"
+                            onClick={() => handleParkingModeChange('all')}
+                          >
+                            ALL
+                          </button>
+                          {PARKING_AXIS_OPTIONS.map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              className={`control-target-btn ${parkingMode === 'axis' && parkingAxis === option.id ? 'is-active' : ''}`}
+                              aria-pressed={parkingMode === 'axis' && parkingAxis === option.id}
+                              data-testid={`parking-axis-${option.id}`}
+                              onClick={() => {
+                                handleParkingModeChange('axis')
+                                handleParkingAxisChange(option.id)
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
                         <button
                           type="button"
                           className="control-action-btn"
@@ -2854,30 +2866,35 @@ function App() {
                       </article>
 
                       <article className="control-card control-card-service">
-                        <h3 className="control-card-title">Сервисный режим</h3>
-                        <p className="control-status-row">
-                          <span>Статус</span>
-                          <strong>{isServiceModeEnabled ? 'Включен' : 'Выключен'}</strong>
-                        </p>
+                        <div className="control-card-head">
+                          <div>
+                            <p className="control-card-kicker">SERVICE</p>
+                            <h3 className="control-card-title">Сервисный режим</h3>
+                          </div>
+                          <p className="control-card-state">{isServiceModeEnabled ? 'Вкл' : 'Выкл'}</p>
+                        </div>
                         <button
                           type="button"
                           className="control-service-btn"
                           data-testid="service-mode-button"
                           aria-pressed={isServiceModeEnabled}
+                          aria-label={isServiceModeEnabled ? 'Выключить сервисный режим' : 'Включить сервисный режим'}
                           onClick={handleServiceModeToggle}
                         >
-                          {isServiceModeEnabled ? 'Выключить сервисный режим' : 'Включить сервисный режим'}
+                          {isServiceModeEnabled ? 'Выключить' : 'Включить'}
                         </button>
                         <p className="control-card-hint">Используйте только во время обслуживания принтера.</p>
                       </article>
                     </div>
 
                     <article className="control-card control-card-fan">
-                      <h3 className="control-card-title">Управление обдувом</h3>
-                      <p className="control-status-row">
-                        <span>Обдув модели</span>
-                        <strong>{modelFanPercent}%</strong>
-                      </p>
+                      <div className="control-card-head">
+                        <div>
+                          <p className="control-card-kicker">FAN</p>
+                          <h3 className="control-card-title">Обдув</h3>
+                        </div>
+                        <p className="control-card-value">{modelFanPercent}%</p>
+                      </div>
                       <HorizontalSteppedSlider
                         value={modelFanPercent}
                         min={MODEL_FAN_BOUNDS_PERCENT.min}
@@ -2891,7 +2908,13 @@ function App() {
                   </div>
 
                   <article className="control-card control-card-motion">
-                    <h3 className="control-card-title">Перемещение по осям</h3>
+                    <div className="control-card-head">
+                      <div>
+                        <p className="control-card-kicker">MOVE</p>
+                        <h3 className="control-card-title">Оси</h3>
+                      </div>
+                      <p className="control-card-state">{movementMode === 'buttons' ? `${moveStepKey} мм` : 'Джойстик'}</p>
+                    </div>
                     <SegmentedToggle
                       options={MOVEMENT_MODE_OPTIONS}
                       value={movementMode}

@@ -330,6 +330,10 @@ body {
   padding-bottom: 0;
 }
 
+.content-grid.is-control-active {
+  padding: var(--space-xs);
+}
+
 .screen-placeholder {
   min-height: 0;
   grid-column: 1 / -1;
@@ -2041,33 +2045,15 @@ body {
   height: 100%;
   overflow: hidden;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--space-xs);
-}
-
-.control-screen-head {
-  display: grid;
-  gap: var(--space-micro);
-}
-
-.control-screen-title {
-  margin: 0;
-  font-size: var(--font-size-heading-medium);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.control-screen-note {
-  margin: 0;
-  font-size: var(--font-size-small);
-  color: var(--color-text-secondary);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
 }
 
 .control-grid {
   min-height: 0;
   height: 100%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 0.98fr) minmax(0, 1.02fr);
   gap: var(--space-sm);
   align-items: stretch;
 }
@@ -2092,12 +2078,12 @@ body {
 
 .control-card {
   min-height: 0;
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid var(--color-border-default);
   background: var(--color-block-surface);
-  padding: var(--space-xs);
+  padding: var(--space-sm);
   display: grid;
-  gap: 6px;
+  gap: var(--space-sm);
   align-content: start;
 }
 
@@ -2123,64 +2109,101 @@ body {
   height: 100%;
 }
 
-.control-card-parking .segmented-toggle-btn {
-  height: 32px;
-  border-radius: 10px;
+.control-parking-targets {
+  display: grid;
+  grid-template-columns: 1.35fr repeat(3, minmax(0, 1fr));
+  gap: var(--space-xs);
 }
 
-.control-card-parking .segmented-toggle-indicator {
-  border-radius: 10px;
+.control-target-btn {
+  min-height: 42px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.control-target-btn.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-surface-soft);
+  color: var(--color-text-primary);
+}
+
+.control-target-btn:active {
+  transform: translateY(1px);
 }
 
 .control-card-parking .control-action-btn,
 .control-card-service .control-service-btn {
-  height: 34px;
-  border-radius: 10px;
-  font-size: var(--font-size-small);
-}
-
-.control-card-service .control-status-row {
-  font-size: var(--font-size-small);
-}
-
-.control-card-service .control-status-row strong {
+  min-height: 44px;
   font-size: var(--font-size-body);
 }
 
-.control-card-title {
+.control-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.control-card-kicker,
+.control-card-state {
   margin: 0;
-  font-size: var(--font-size-body-large);
+  font-size: var(--font-size-body);
+  line-height: 1;
+  color: var(--color-text-soft);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.control-card-title {
+  margin: var(--space-xxs) 0 0;
+  font-size: var(--layout-block-label-size);
+  line-height: 1.15;
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
+}
+
+.control-card-state {
+  padding: 3px 0 0;
+  color: var(--color-text-secondary);
+  max-width: 48%;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-card-value {
+  margin: 0;
+  font-size: var(--layout-block-value-size);
+  line-height: 1;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  white-space: nowrap;
 }
 
 .control-card-hint {
   margin: 0;
-  font-size: var(--font-size-small);
-  color: var(--color-text-secondary);
-}
-
-.control-status-row {
-  margin: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-sm);
   font-size: var(--font-size-body);
+  line-height: 1.25;
   color: var(--color-text-secondary);
-}
-
-.control-status-row strong {
-  font-size: var(--font-size-body-large);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
 }
 
 .control-action-btn,
 .control-service-btn,
 .axis-cross-btn {
-  height: 34px;
-  border-radius: 12px;
+  min-height: 44px;
+  border-radius: 8px;
   border: 1px solid var(--color-border-default);
   background: var(--color-surface-elevated);
   color: var(--color-text-primary);
@@ -2246,13 +2269,13 @@ body {
 }
 
 .segmented-toggle-btn {
-  height: 36px;
-  border-radius: 12px;
+  min-height: 42px;
+  border-radius: 8px;
   border: 1px solid var(--color-border-default);
   background: var(--color-surface-elevated);
   color: var(--color-text-secondary);
   padding: 0 var(--space-sm);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-medium);
   text-align: center;
   white-space: nowrap;
@@ -2287,7 +2310,7 @@ body {
   width: 100%;
   grid-template-columns: max-content max-content;
   justify-content: center;
-  gap: 16px;
+  gap: 20px;
   align-items: start;
 }
 
@@ -2305,44 +2328,44 @@ body {
 .axis-cross-title {
   margin: 0;
   text-align: center;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-body);
   color: var(--color-text-secondary);
 }
 
 .axis-cross-xy {
   position: relative;
-  width: 160px;
-  height: 104px;
+  width: 172px;
+  height: 116px;
 }
 
 .axis-cross-z {
   position: relative;
-  width: 48px;
-  height: 104px;
+  width: 52px;
+  height: 116px;
 }
 
 .axis-cross-xy > button:nth-of-type(1) {
   position: absolute;
   top: 0;
-  left: 56px;
+  left: 60px;
 }
 
 .axis-cross-xy > button:nth-of-type(2) {
   position: absolute;
-  top: 28px;
+  top: 32px;
   left: 0;
 }
 
 .axis-cross-xy > button:nth-of-type(3) {
   position: absolute;
-  top: 28px;
+  top: 32px;
   right: 0;
 }
 
 .axis-cross-xy > button:nth-of-type(4) {
   position: absolute;
   bottom: 0;
-  left: 56px;
+  left: 60px;
 }
 
 .axis-cross-z > button:nth-of-type(1) {
@@ -2358,8 +2381,8 @@ body {
 }
 
 .axis-cross-btn {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 10px;
   font-size: 30px;
   line-height: 1;
@@ -2385,7 +2408,7 @@ body {
 }
 
 .control-motion-buttons .segmented-toggle-btn {
-  height: 34px;
+  min-height: 42px;
 }
 
 .control-motion-buttons .segmented-toggle-indicator {
@@ -4791,6 +4814,7 @@ select {
 .settings-console-key,
 .settings-toggle-row,
 .control-action-btn,
+.control-target-btn,
 .control-service-btn,
 .axis-cross-btn,
 .babystep-btn,
@@ -4821,6 +4845,7 @@ select {
 .settings-console-key:hover,
 .settings-console-key:focus-visible,
 .control-service-btn.is-active,
+.control-target-btn.is-active,
 .axis-cross-btn:active,
 .babystep-btn:active,
 .file-modal-action:not(:disabled):hover,
@@ -5477,17 +5502,28 @@ select {
 
   .axis-cross-xy {
     width: 148px;
-    height: 96px;
+    height: 100px;
   }
 
   .axis-cross-z {
     width: 44px;
-    height: 96px;
+    height: 100px;
   }
 
   .axis-cross-btn {
     width: 44px;
     height: 44px;
+    min-height: 44px;
+  }
+
+  .axis-cross-xy > button:nth-of-type(1),
+  .axis-cross-xy > button:nth-of-type(4) {
+    left: 52px;
+  }
+
+  .axis-cross-xy > button:nth-of-type(2),
+  .axis-cross-xy > button:nth-of-type(3) {
+    top: 28px;
   }
 
   .joystick-panel {

@@ -156,22 +156,22 @@ describe('App', () => {
     expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Управление')
     expect(screen.getByRole('heading', { name: 'Парковка' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Сервисный режим' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Управление обдувом' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Перемещение по осям' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Обдув' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Оси' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Парковка по всем осям' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Отключить моторы' })).toBeInTheDocument()
     expect(screen.getByTestId('model-fan-slider')).toBeInTheDocument()
 
     const parkingAllButton = screen.getByTestId('parking-mode-all')
-    const parkingAxisButton = screen.getByTestId('parking-mode-axis')
+    const parkingAxisXButton = screen.getByTestId('parking-axis-X')
 
     expect(parkingAllButton).toHaveAttribute('aria-pressed', 'true')
-    expect(parkingAxisButton).toHaveAttribute('aria-pressed', 'false')
+    expect(parkingAxisXButton).toHaveAttribute('aria-pressed', 'false')
 
-    fireEvent.click(parkingAxisButton)
+    fireEvent.click(parkingAxisXButton)
 
-    expect(parkingAxisButton).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByTestId('parking-axis-X')).toHaveAttribute('aria-pressed', 'true')
+    expect(parkingAllButton).toHaveAttribute('aria-pressed', 'false')
+    expect(parkingAxisXButton).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Парковка оси X' })).toBeInTheDocument()
 
     const moveButtonsMode = screen.getByTestId('move-mode-buttons')
