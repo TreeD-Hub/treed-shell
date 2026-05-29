@@ -12,10 +12,13 @@ import menuLanguage from '../assets/icons/menu-language.svg'
 import menuMacros from '../assets/icons/menu-macros.svg'
 import menuSettings from '../assets/icons/menu-settings.svg'
 import menuUpdates from '../assets/icons/menu-updates.svg'
+import metricFan from '../assets/icons/metric-fan.svg'
+import metricLight from '../assets/icons/metric-light.svg'
 import statusCloud from '../assets/icons/status-cloud.svg'
 import statusNotification from '../assets/icons/status-notification.svg'
 import statusPower from '../assets/icons/status-power.svg'
 import statusWifi from '../assets/icons/status-wifi.svg'
+import utilityChevron from '../assets/icons/utility-chevron.svg'
 
 export const UI_ICON_ASSETS = {
   actionPause,
@@ -32,10 +35,13 @@ export const UI_ICON_ASSETS = {
   menuMacros,
   menuSettings,
   menuUpdates,
+  metricFan,
+  metricLight,
   statusCloud,
   statusNotification,
   statusPower,
   statusWifi,
+  utilityChevron,
 } as const
 
 export type UiIconName = keyof typeof UI_ICON_ASSETS

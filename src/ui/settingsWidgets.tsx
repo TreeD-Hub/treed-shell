@@ -15,6 +15,7 @@ type SettingsSidebarMenuProps<T extends string> = {
   onChange: (nextValue: T) => void
   ariaLabel: string
   testIdPrefix?: string
+  iconSize?: number
 }
 
 export function SettingsSidebarMenu<T extends string>({
@@ -23,6 +24,7 @@ export function SettingsSidebarMenu<T extends string>({
   onChange,
   ariaLabel,
   testIdPrefix,
+  iconSize = 20,
 }: SettingsSidebarMenuProps<T>) {
   return (
     <nav className="settings-sidebar-menu" aria-label={ariaLabel}>
@@ -32,11 +34,13 @@ export function SettingsSidebarMenu<T extends string>({
           type="button"
           className={joinClassNames('settings-sidebar-item', value === option.id && 'is-active')}
           aria-pressed={value === option.id}
+          aria-label={option.label}
+          title={option.label}
           data-testid={testIdPrefix ? `${testIdPrefix}-${option.id}` : undefined}
           onClick={() => onChange(option.id)}
         >
-          <IconMask name={option.icon} size={20} />
-          <span>{option.label}</span>
+          <IconMask name={option.icon} size={iconSize} />
+          <span className="settings-sidebar-label">{option.label}</span>
         </button>
       ))}
     </nav>

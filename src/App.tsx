@@ -67,6 +67,7 @@ type FilesSortKey = 'name' | 'addedAt'
 type ParkingMode = 'all' | 'axis'
 type MovementMode = 'buttons' | 'joystick'
 type MoveStepKey = '1' | '10' | '25' | '100'
+type ControlGroupId = 'movement' | 'heating' | 'fans' | 'lighting'
 type MacrosGroupId = 'bedMesh'
 type BedCalibrationStage = 'launch' | 'manual' | 'zOffset'
 type ActivePrintUiState = 'printing' | 'paused'
@@ -207,6 +208,12 @@ const MOVE_STEP_OPTIONS: Array<{ id: MoveStepKey; label: string; valueMm: number
   { id: '10', label: '10 мм', valueMm: 10 },
   { id: '25', label: '25 мм', valueMm: 25 },
   { id: '100', label: '100 мм', valueMm: 100 },
+]
+const CONTROL_GROUP_OPTIONS: Array<SettingsMenuOption<ControlGroupId>> = [
+  { id: 'movement', label: 'Перемещение', icon: 'menuControl' },
+  { id: 'heating', label: 'Нагрев', icon: 'metricNozzle' },
+  { id: 'fans', label: 'Вентиляторы', icon: 'metricFan' },
+  { id: 'lighting', label: 'Освещение', icon: 'metricLight' },
 ]
 const SETTINGS_GROUP_OPTIONS: Array<SettingsMenuOption<SettingsGroupId>> = [
   { id: 'network', label: 'Сеть', icon: 'statusWifi' },
@@ -543,6 +550,8 @@ function App() {
   const [parkingAxis, setParkingAxis] = useState<AxisId>('X')
   const [movementMode, setMovementMode] = useState<MovementMode>('buttons')
   const [moveStepKey, setMoveStepKey] = useState<MoveStepKey>('1')
+  const [activeControlGroup, setActiveControlGroup] = useState<ControlGroupId>('movement')
+  const [isControlMenuCompact, setIsControlMenuCompact] = useState<boolean>(false)
   const [activeControlFlashKey, setActiveControlFlashKey] = useState<string | null>(null)
   const [isMainLightEnabled, setIsMainLightEnabled] = useState<boolean>(false)
   const [isToolheadLightEnabled, setIsToolheadLightEnabled] = useState<boolean>(false)
@@ -577,6 +586,8 @@ function App() {
     0,
     BABYSTEP_STEP_OPTIONS.findIndex((step) => step === babystepStep),
   )
+  const activeControlGroupOption =
+    CONTROL_GROUP_OPTIONS.find((option) => option.id === activeControlGroup) ?? CONTROL_GROUP_OPTIONS[0]
   const formattedSnapshotTime = useMemo(() => {
     const parsed = new Date(snapshot.updatedAt)
     if (Number.isNaN(parsed.getTime())) {
@@ -828,6 +839,10 @@ function App() {
 
   function handleMovementModeChange(nextMode: MovementMode): void {
     setMovementMode(nextMode)
+  }
+
+  function handleControlMenuCompactToggle(): void {
+    setIsControlMenuCompact((currentState) => !currentState)
   }
 
   function handleMacroZOffsetAdjust(direction: -1 | 1): void {
@@ -2814,167 +2829,226 @@ function App() {
             </section>
           ) : activeScreen === 'control' ? (
             <section className="control-screen" data-testid="screen-control">
-              <div className="control-scroll-area">
-                <div className="control-grid">
-                  <div className="control-side-stack">
-                    <article className="control-card control-card-parking">
-                      <div className="control-card-head">
-                        <h3 className="control-card-title">Парковка</h3>
-                        {pendingCommand === 'home' ? (
-                          <p className="control-card-state">Парковка...</p>
-                        ) : null}
-                      </div>
-                      <div className="control-parking-targets" role="group" aria-label="Цель парковки">
-                        <button
-                          type="button"
-                          className={`control-target-btn ${activeControlFlashKey === 'parking-all' ? 'is-active' : ''}`}
-                          aria-pressed={activeControlFlashKey === 'parking-all'}
-                          data-testid="parking-mode-all"
-                          onClick={() => void handleParkingTargetSelect('all')}
-                          disabled={isBusy}
-                        >
-                          ALL
-                        </button>
-                        {PARKING_AXIS_OPTIONS.map((option) => (
+              <div className={`control-layout ${isControlMenuCompact ? 'is-menu-compact' : ''}`}>
+                <aside className={`settings-menu-shell control-menu-shell ${isControlMenuCompact ? 'is-compact' : ''}`}>
+                  <button
+                    type="button"
+                    className="control-menu-collapse-btn"
+                    aria-expanded={!isControlMenuCompact}
+                    aria-label={isControlMenuCompact ? 'Развернуть меню управления' : 'Свернуть меню управления до иконок'}
+                    data-testid="control-menu-mode-toggle"
+                    onClick={handleControlMenuCompactToggle}
+                  >
+                    <IconMask name="utilityChevron" size={20} className="control-menu-collapse-icon" />
+                  </button>
+                  <SettingsSidebarMenu
+                    options={CONTROL_GROUP_OPTIONS}
+                    value={activeControlGroup}
+                    onChange={setActiveControlGroup}
+                    ariaLabel="Разделы управления"
+                    testIdPrefix="control-group"
+                    iconSize={28}
+                  />
+                </aside>
+
+                <div className="settings-content-shell control-content-shell">
+                  <p className="control-tab-label" data-testid="control-active-tab-label">
+                    {activeControlGroupOption.label}
+                  </p>
+                  <div className="control-scroll-area">
+                    {activeControlGroup === 'movement' ? (
+                      <div className="control-grid">
+                        <article className="control-card control-card-parking">
+                          <div className="control-card-head">
+                            <h3 className="control-card-title">Парковка</h3>
+                            {pendingCommand === 'home' ? (
+                              <p className="control-card-state">Парковка...</p>
+                            ) : null}
+                          </div>
+                          <div className="control-parking-targets" role="group" aria-label="Цель парковки">
+                            <button
+                              type="button"
+                              className={`control-target-btn ${activeControlFlashKey === 'parking-all' ? 'is-active' : ''}`}
+                              aria-pressed={activeControlFlashKey === 'parking-all'}
+                              data-testid="parking-mode-all"
+                              onClick={() => void handleParkingTargetSelect('all')}
+                              disabled={isBusy}
+                            >
+                              ALL
+                            </button>
+                            {PARKING_AXIS_OPTIONS.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`control-target-btn ${activeControlFlashKey === `parking-${option.id}` ? 'is-active' : ''}`}
+                                aria-pressed={activeControlFlashKey === `parking-${option.id}`}
+                                data-testid={`parking-axis-${option.id}`}
+                                onClick={() => void handleParkingTargetSelect('axis', option.id)}
+                                disabled={isBusy}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
                           <button
-                            key={option.id}
                             type="button"
-                            className={`control-target-btn ${activeControlFlashKey === `parking-${option.id}` ? 'is-active' : ''}`}
-                            aria-pressed={activeControlFlashKey === `parking-${option.id}`}
-                            data-testid={`parking-axis-${option.id}`}
-                            onClick={() => void handleParkingTargetSelect('axis', option.id)}
+                            className="control-service-btn"
+                            data-testid="service-mode-button"
+                            aria-pressed={activeControlFlashKey === 'service-mode'}
+                            onClick={handleServiceModeToggle}
+                          >
+                            Сервисный режим
+                          </button>
+
+                          <button
+                            type="button"
+                            className="control-action-btn control-action-btn-danger"
+                            data-testid="motors-disable-button"
+                            onClick={handleMotorsDisable}
                             disabled={isBusy}
                           >
-                            {option.label}
+                            Отключить моторы
                           </button>
-                        ))}
+                        </article>
+
+                        <article className="control-card control-card-motion">
+                          <div className="control-card-head">
+                            <h3 className="control-card-title">Оси</h3>
+                          </div>
+                          <SegmentedToggle
+                            options={MOVEMENT_MODE_OPTIONS}
+                            value={movementMode}
+                            onChange={handleMovementModeChange}
+                            ariaLabel="Режим перемещения"
+                            testIdPrefix="move-mode"
+                          />
+                          {movementMode === 'buttons' ? (
+                            <div className="control-motion-buttons">
+                              <SegmentedToggle
+                                options={MOVE_STEP_OPTIONS}
+                                value={moveStepKey}
+                                onChange={handleMoveStepChange}
+                                ariaLabel="Шаг перемещения"
+                                testIdPrefix="move-step"
+                              />
+                              <div className="control-coordinates-panel">
+                                <p className="joystick-readout" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
+                              </div>
+                              <div className="control-cross-wrap">
+                                <AxisCrossControls
+                                  onMove={handleAxisMove}
+                                  onFilamentMove={handleFilamentMove}
+                                  disabled={isBusy}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="joystick-panel">
+                              <div className="joystick-xy-control">
+                                <p className="joystick-axis-title">XY</p>
+                                <VirtualJoystick
+                                  testId="axis-joystick"
+                                  disabled={isBusy}
+                                  onVectorChange={handleJoystickVectorChange}
+                                />
+                              </div>
+                              <div className="joystick-z-control">
+                                <p className="joystick-axis-title">Z</p>
+                                <VerticalAxisSlider
+                                  value={printHeadPosition.z}
+                                  min={HEAD_Z_BOUNDS_MM.min}
+                                  max={HEAD_Z_BOUNDS_MM.max}
+                                  step={1}
+                                  onChange={handleJoystickZChange}
+                                  minAtTop
+                                  disabled={isBusy}
+                                  testId="axis-z-slider"
+                                />
+                              </div>
+                              <div className="joystick-meta">
+                                <div className="joystick-meta-block">
+                                  <p className="joystick-meta-label">Координаты</p>
+                                  <p className="joystick-readout" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
+                                </div>
+                                <div className="joystick-meta-block">
+                                  <p className="joystick-meta-label">Скорость XY</p>
+                                  <p className="joystick-readout">{joystickSpeedMmS.toFixed(1)} / 50 мм/с</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </article>
                       </div>
-                      <button
-                        type="button"
-                        className="control-service-btn"
-                        data-testid="service-mode-button"
-                        aria-pressed={activeControlFlashKey === 'service-mode'}
-                        onClick={handleServiceModeToggle}
-                      >
-                        Сервисный режим
-                      </button>
-
-                      <button
-                        type="button"
-                        className="control-action-btn control-action-btn-danger"
-                        data-testid="motors-disable-button"
-                        onClick={handleMotorsDisable}
-                        disabled={isBusy}
-                      >
-                        Отключить моторы
-                      </button>
-                    </article>
-
-                    {/*
-                      TODO: перенести в блок вентиляторов, а после удалить отсюда.
-                    <article className="control-card control-card-fan">
-                      <div className="control-card-head">
-                        <h3 className="control-card-title">Обдув</h3>
-                        <p className="control-card-value">{modelFanPercent}%</p>
+                    ) : activeControlGroup === 'heating' ? (
+                      <div className="control-heating-grid">
+                        <article className="control-card control-card-heating">
+                          <div className="control-card-head">
+                            <h3 className="control-card-title">Сопло</h3>
+                            <p className="control-card-value">{rounded(snapshot.extruderTemp)}°C</p>
+                          </div>
+                          <TuneNumberControl
+                            label="Целевая температура"
+                            value={printNozzleTargetTemp}
+                            min={0}
+                            max={300}
+                            step={5}
+                            unit="°C"
+                            onChange={(nextValue) => setPrintNozzleTargetTemp(Math.round(clampAxisValue(nextValue, 0, 300)))}
+                            testIdPrefix="control-heating-nozzle"
+                          />
+                        </article>
+                        <article className="control-card control-card-heating">
+                          <div className="control-card-head">
+                            <h3 className="control-card-title">Стол</h3>
+                            <p className="control-card-value">{rounded(snapshot.bedTemp)}°C</p>
+                          </div>
+                          <TuneNumberControl
+                            label="Целевая температура"
+                            value={printBedTargetTemp}
+                            min={0}
+                            max={300}
+                            step={5}
+                            unit="°C"
+                            onChange={(nextValue) => setPrintBedTargetTemp(Math.round(clampAxisValue(nextValue, 0, 300)))}
+                            testIdPrefix="control-heating-bed"
+                          />
+                        </article>
                       </div>
-                      <HorizontalSteppedSlider
-                        value={modelFanPercent}
-                        min={MODEL_FAN_BOUNDS_PERCENT.min}
-                        max={MODEL_FAN_BOUNDS_PERCENT.max}
-                        step={MODEL_FAN_STEP_PERCENT}
-                        onChange={handleModelFanPercentChange}
-                        disabled={isBusy}
-                        testId="model-fan-slider"
-                      />
-                    </article>
-                    */}
-
-                    <article className="control-card control-card-lighting">
-                      <h3 className="control-card-title">Подсветка</h3>
-                      <SettingsToggleRow
-                        label="Основной свет"
-                        checked={isMainLightEnabled}
-                        onChange={setIsMainLightEnabled}
-                        testId="control-light-main"
-                      />
-                      <SettingsToggleRow
-                        label="Подсветка ПГ"
-                        checked={isToolheadLightEnabled}
-                        onChange={setIsToolheadLightEnabled}
-                        testId="control-light-toolhead"
-                      />
-                    </article>
-                  </div>
-
-                  <article className="control-card control-card-motion">
-                    <div className="control-card-head">
-                      <h3 className="control-card-title">Оси</h3>
-                    </div>
-                    <SegmentedToggle
-                      options={MOVEMENT_MODE_OPTIONS}
-                      value={movementMode}
-                      onChange={handleMovementModeChange}
-                      ariaLabel="Режим перемещения"
-                      testIdPrefix="move-mode"
-                    />
-                    {movementMode === 'buttons' ? (
-                      <div className="control-motion-buttons">
-                        <SegmentedToggle
-                          options={MOVE_STEP_OPTIONS}
-                          value={moveStepKey}
-                          onChange={handleMoveStepChange}
-                          ariaLabel="Шаг перемещения"
-                          testIdPrefix="move-step"
+                    ) : activeControlGroup === 'fans' ? (
+                      <article className="control-card control-card-fan">
+                        <div className="control-card-head">
+                          <h3 className="control-card-title">Обдув модели</h3>
+                          <p className="control-card-value">{printFanPercent}%</p>
+                        </div>
+                        <HorizontalSteppedSlider
+                          value={printFanPercent}
+                          min={0}
+                          max={100}
+                          step={5}
+                          onChange={(nextValue) => setPrintFanPercent(Math.round(nextValue))}
+                          disabled={isBusy}
+                          testId="control-fan-slider"
                         />
-                        <div className="control-coordinates-panel">
-                          <p className="joystick-readout" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
-                        </div>
-                        <div className="control-cross-wrap">
-                          <AxisCrossControls
-                            onMove={handleAxisMove}
-                            onFilamentMove={handleFilamentMove}
-                            disabled={isBusy}
-                          />
-                        </div>
-                      </div>
+                      </article>
                     ) : (
-                      <div className="joystick-panel">
-                        <div className="joystick-xy-control">
-                          <p className="joystick-axis-title">XY</p>
-                          <VirtualJoystick
-                            testId="axis-joystick"
-                            disabled={isBusy}
-                            onVectorChange={handleJoystickVectorChange}
-                          />
-                        </div>
-                        <div className="joystick-z-control">
-                          <p className="joystick-axis-title">Z</p>
-                          <VerticalAxisSlider
-                            value={printHeadPosition.z}
-                            min={HEAD_Z_BOUNDS_MM.min}
-                            max={HEAD_Z_BOUNDS_MM.max}
-                            step={1}
-                            onChange={handleJoystickZChange}
-                            minAtTop
-                            disabled={isBusy}
-                            testId="axis-z-slider"
-                          />
-                        </div>
-                        <div className="joystick-meta">
-                          <div className="joystick-meta-block">
-                            <p className="joystick-meta-label">Координаты</p>
-                            <p className="joystick-readout" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
-                          </div>
-                          <div className="joystick-meta-block">
-                            <p className="joystick-meta-label">Скорость XY</p>
-                            <p className="joystick-readout">{joystickSpeedMmS.toFixed(1)} / 50 мм/с</p>
-                          </div>
-                        </div>
-                      </div>
+                      <article className="control-card control-card-lighting">
+                        <h3 className="control-card-title">Подсветка</h3>
+                        <SettingsToggleRow
+                          label="Основной свет"
+                          checked={isMainLightEnabled}
+                          onChange={setIsMainLightEnabled}
+                          testId="control-light-main"
+                        />
+                        <SettingsToggleRow
+                          label="Подсветка ПГ"
+                          checked={isToolheadLightEnabled}
+                          onChange={setIsToolheadLightEnabled}
+                          testId="control-light-toolhead"
+                        />
+                      </article>
                     )}
-                  </article>
+                  </div>
                 </div>
-
               </div>
             </section>
           ) : activeScreen === 'macros' ? (
