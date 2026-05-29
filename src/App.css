@@ -2531,6 +2531,7 @@ body {
 
 .axis-cross-xy {
   --axis-cross-btn-size: 64px;
+  --axis-cross-dot-color: rgba(244, 244, 240, 0.58);
   position: relative;
   width: 100%;
   min-width: 224px;
@@ -2539,11 +2540,11 @@ body {
 
 .axis-cross-z,
 .axis-cross-e {
+  --axis-cross-dot-color: rgba(244, 244, 240, 0.58);
+  position: relative;
+  width: 100%;
   min-height: 156px;
-  display: grid;
-  grid-template-rows: repeat(2, 64px);
-  gap: 8px;
-  align-content: center;
+  height: 156px;
 }
 
 .axis-cross-xy > button:nth-of-type(1) {
@@ -2568,6 +2569,22 @@ body {
   position: absolute;
   bottom: 0;
   left: calc(50% - (var(--axis-cross-btn-size) / 2));
+}
+
+.axis-cross-z > button:nth-of-type(1),
+.axis-cross-e > button:nth-of-type(1) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.axis-cross-z > button:nth-of-type(2),
+.axis-cross-e > button:nth-of-type(2) {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
 }
 
 .axis-cross-btn {
@@ -2609,29 +2626,19 @@ body {
   color: var(--color-text-secondary);
 }
 
-.axis-cross-center {
-  --axis-cross-dot-color: rgba(244, 244, 240, 0.58);
-  display: block;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 32px;
-  height: 32px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.axis-cross-center::before,
-.axis-cross-center::after {
+.axis-cross-xy::before,
+.axis-cross-xy::after,
+.axis-cross-z::before,
+.axis-cross-e::before {
   content: '';
   position: absolute;
   opacity: 0.42;
   pointer-events: none;
 }
 
-.axis-cross-center::before {
-  left: -18px;
-  right: -18px;
+.axis-cross-xy::before {
+  left: 70px;
+  right: 70px;
   top: 50%;
   height: 1px;
   background: repeating-linear-gradient(
@@ -2641,9 +2648,11 @@ body {
   );
 }
 
-.axis-cross-center::after {
-  top: 0;
-  bottom: 0;
+.axis-cross-xy::after,
+.axis-cross-z::before,
+.axis-cross-e::before {
+  top: 68px;
+  bottom: 68px;
   left: 50%;
   width: 1px;
   background: repeating-linear-gradient(
@@ -2653,11 +2662,12 @@ body {
   );
 }
 
+.axis-cross-center {
+  display: none;
+}
+
 .axis-cross-center-core {
-  position: absolute;
-  inset: 5px;
-  background:
-    radial-gradient(circle, var(--axis-cross-dot-color) 0 1px, transparent 1.2px) 0 0 / 7px 7px;
+  display: none;
 }
 
 .axis-cross-spacer {
@@ -2788,7 +2798,7 @@ body {
   align-items: center;
   gap: var(--space-xs);
   min-height: 38px;
-  padding: 0 10px;
+  padding: 0 10px 0 14px;
   border: 1px solid var(--color-border-default);
   border-radius: 12px;
   background: var(--color-block-surface);
@@ -2811,6 +2821,7 @@ body {
   align-items: center;
   gap: 12px;
   font-variant-numeric: tabular-nums;
+  padding-left: 2px;
 }
 
 .axis-coordinate-item {
