@@ -603,13 +603,6 @@ function App() {
   const idleBedTempValue = rounded(snapshot.bedTemp)
   const effectiveActivePrintState = hasActivePrint ? (activePrintUiState ?? snapshot.state) : snapshot.state
   const isPrintPaused = hasActivePrint && statusLabel(effectiveActivePrintState) === 'Пауза'
-  const topBarScreenLabel = useMemo(() => {
-    if (activeScreen === 'dashboard') {
-      return hasActivePrint ? statusLabel(effectiveActivePrintState) : 'Ожидание печати'
-    }
-
-    return BOTTOM_NAV_ITEMS.find((item) => item.id === activeScreen)?.label ?? statusLabel(snapshot.state)
-  }, [activeScreen, effectiveActivePrintState, hasActivePrint, snapshot.state])
   const idleHeroStatusLabel = snapshot.connection === 'online' ? 'Ожидание печати' : 'Нет связи'
   const sortedPrintFiles = useMemo(() => {
     const nextItems = [...filesLibrary]
@@ -790,6 +783,10 @@ function App() {
       shellRect && anchorRect && shellRect.width > 0 && anchorRect.width > 0
         ? anchorRect.left - shellRect.left + (anchorRect.width / 2)
         : resolveFallbackAnchorCenterX(id, shellWidth)
+    const anchorBottomY =
+      shellRect && anchorRect && shellRect.height > 0 && anchorRect.height > 0
+        ? anchorRect.bottom - shellRect.top
+        : 0
 
     let left = anchorCenterX - (popupWidth / 2)
     left = Math.max(TOP_POPUP_SIDE_PADDING, Math.min(left, shellWidth - popupWidth - TOP_POPUP_SIDE_PADDING))
@@ -800,7 +797,7 @@ function App() {
     )
 
     return {
-      top: TOP_POPUP_GAP,
+      top: Math.max(TOP_POPUP_GAP, anchorBottomY + TOP_POPUP_GAP),
       left,
       arrowLeft,
     }
@@ -824,6 +821,14 @@ function App() {
     setActiveScreen('settings')
     closeTopPopup()
   }, [closeTopPopup])
+
+  function handleScreenSelect(nextScreen: ScreenId): void {
+    if (nextScreen !== 'dashboard') {
+      closeTopPopup()
+    }
+
+    setActiveScreen(nextScreen)
+  }
 
   function handleFilesSortChange(nextSortKey: FilesSortKey): void {
     if (nextSortKey === filesSortKey) {
@@ -1469,6 +1474,12 @@ function App() {
     setConsoleNotice(`Команда отправлена: ${trimmed}`)
     setConsoleCommandValue('')
   }
+
+  useEffect(() => {
+    if (activeScreen !== 'dashboard' && activeTopPopup !== null) {
+      closeTopPopup()
+    }
+  }, [activeScreen, activeTopPopup, closeTopPopup])
 
   useEffect(() => {
     if (activeTopPopup === null || typeof window === 'undefined') {
@@ -2448,37 +2459,37 @@ function App() {
     }
   }, [])
 
+  const dashboardStatusDock = (
+    <div className="dashboard-status-dock">
+      <span className="dashboard-status-logo">TreeD</span>
+      <div className="dashboard-status-actions top-icons" aria-label="иконки статуса главной">
+        {TOP_STATUS_BUTTONS.map((item) => (
+          <StatusIconButton
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            tone={item.tone}
+            showNotificationDot={item.showNotificationDot}
+            className={activeTopPopup === item.id ? 'is-active' : undefined}
+            aria-haspopup="dialog"
+            aria-expanded={activeTopPopup === item.id}
+            onClick={() => openTopPopup(item.id)}
+            ref={(node) => setTopButtonRef(item.id, node)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+
   return (
     <main className={`app-root ${isMaxPerformanceModeEnabled ? 'is-performance-mode' : ''}`}>
       <section className="screen-shell" data-testid="screen-shell" ref={screenShellRef}>
-        <header className="top-bar">
-          <div className="brand-wrap">
-            <h1>TreeD Принтер</h1>
-            <span className="print-state" data-testid="top-bar-screen-label">{topBarScreenLabel}</span>
-          </div>
-          <div className="top-icons" aria-label="иконки статуса">
-            {TOP_STATUS_BUTTONS.map((item) => (
-              <StatusIconButton
-                key={item.id}
-                icon={item.icon}
-                label={item.label}
-                tone={item.tone}
-                showNotificationDot={item.showNotificationDot}
-                className={activeTopPopup === item.id ? 'is-active' : undefined}
-                aria-haspopup="dialog"
-                aria-expanded={activeTopPopup === item.id}
-                onClick={() => openTopPopup(item.id)}
-                ref={(node) => setTopButtonRef(item.id, node)}
-              />
-            ))}
-          </div>
-        </header>
-
         <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''} ${activeScreen === 'control' ? 'is-control-active' : ''}`}>
           {activeScreen === 'dashboard' ? (
             hasActivePrint ? (
               <>
               <section className="job-card">
+                {dashboardStatusDock}
                 <div className="preview-panel">
                   <div className="preview-inner">
                     <PrintPreviewIcon />
@@ -2674,6 +2685,7 @@ function App() {
                     <img className="dashboard-idle-logo-image" src={treeDLogoAsset} alt="" />
                   </div>
                   <p className="dashboard-idle-title">{idleHeroStatusLabel}</p>
+                  {dashboardStatusDock}
                 </div>
 
                 <aside className="dashboard-idle-sidebar">
@@ -3903,7 +3915,7 @@ function App() {
               icon={item.icon}
               active={item.id === activeScreen}
               aria-current={item.id === activeScreen ? 'page' : undefined}
-              onClick={() => setActiveScreen(item.id)}
+              onClick={() => handleScreenSelect(item.id)}
             />
           ))}
         </nav>

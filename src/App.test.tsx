@@ -6,10 +6,8 @@ describe('App', () => {
     render(<App />)
 
     expect(screen.getByTestId('screen-shell')).toBeInTheDocument()
-    expect(screen.getByText('TreeD Принтер')).toBeInTheDocument()
-    await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Ожидание печати')
-    })
+    expect(screen.getByText('TreeD')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Статус Wi-Fi' })).toBeInTheDocument()
     expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
     expect(screen.getByText(/Экосистема/i)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Ожидание печати' })).not.toBeInTheDocument()
@@ -40,7 +38,7 @@ describe('App', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByRole('button', { name: 'Стоп' })).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Стоп' }))
@@ -48,7 +46,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('print-cancel-confirm-button'))
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Ожидание печати')
+      expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
     })
     expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
   })
@@ -61,7 +59,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('print-file-start-button'))
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByRole('button', { name: 'Стоп' })).toBeInTheDocument()
     })
 
     const actionButtons = screen.getAllByRole('button')
@@ -75,7 +73,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Пауза' }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Пауза')
+      expect(screen.getByRole('button', { name: 'Продолжить' })).toBeInTheDocument()
     })
 
     const resumeActionButton = screen.getByRole('button', { name: 'Продолжить' })
@@ -86,7 +84,7 @@ describe('App', () => {
     fireEvent.click(resumeActionButton)
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByRole('button', { name: 'Пауза' })).toBeInTheDocument()
     })
   })
 
@@ -98,7 +96,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('print-file-start-button'))
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByTestId('print-tune-group-nozzle')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByTestId('print-tune-group-nozzle'))
@@ -127,7 +125,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Файлы' }))
 
     expect(screen.getByTestId('screen-files')).toBeInTheDocument()
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Файлы')
+    expect(screen.queryByRole('button', { name: 'Статус Wi-Fi' })).not.toBeInTheDocument()
     expect(screen.getByText('Прокрутите вниз, чтобы найти нужную модель.')).toBeInTheDocument()
     expect(screen.queryByText(/Экран файлов подключен в каркас маршрутизации/i)).not.toBeInTheDocument()
     expect(screen.getAllByTestId('print-file-card')).toHaveLength(12)
@@ -153,7 +151,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
 
     expect(screen.getByTestId('screen-control')).toBeInTheDocument()
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Управление')
+    expect(screen.queryByRole('button', { name: 'Статус Wi-Fi' })).not.toBeInTheDocument()
     expect(screen.getByTestId('control-group-movement')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByTestId('control-menu-mode-toggle')).toHaveAttribute('aria-expanded', 'true')
     fireEvent.click(screen.getByTestId('control-menu-mode-toggle'))
@@ -251,7 +249,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Макросы' }))
 
     expect(screen.getByTestId('screen-macros')).toBeInTheDocument()
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Макросы')
+    expect(screen.queryByRole('button', { name: 'Статус Wi-Fi' })).not.toBeInTheDocument()
     expect(screen.getByTestId('macros-zoffset-value')).toHaveTextContent('-0.080')
 
     fireEvent.click(screen.getByTestId('macros-zoffset-plus'))
@@ -360,7 +358,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('print-file-modal')).not.toBeInTheDocument()
     })
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+    expect(screen.getByTestId('print-tune-group-progress')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Файлы' }))
     fireEvent.click(screen.getAllByTestId('print-file-card')[0])
@@ -391,7 +389,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Перейти в настройки Wi-Fi' }))
 
     expect(screen.getByTestId('screen-settings')).toBeInTheDocument()
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Настройки')
+    expect(screen.queryByRole('button', { name: 'Статус Wi-Fi' })).not.toBeInTheDocument()
     expect(screen.getByTestId('settings-group-network')).toHaveAttribute('aria-pressed', 'true')
     const wifiSearchInput = screen.getByTestId('settings-network-search') as HTMLInputElement
     fireEvent.focus(wifiSearchInput)
@@ -414,7 +412,7 @@ describe('App', () => {
     expect(screen.queryByText('Текущая сеть')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('settings-network-connect-button'))
     expect(screen.getByTestId('settings-network-notice')).toHaveTextContent('Подключено к Office_Main_5G.')
-    expect(wifiButton).not.toHaveClass('is-active')
+    expect(screen.queryByTestId('top-popup-wifi')).not.toBeInTheDocument()
   })
 
   it('renders extended settings sections and handles interactions', () => {
