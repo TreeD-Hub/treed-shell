@@ -2537,6 +2537,12 @@ body {
   background: color-mix(in srgb, var(--color-text-primary) 62%, transparent);
 }
 
+.control-fan-design-slider .fan-slider-ruler span.is-major {
+  width: 1px;
+  height: 9px;
+  background: color-mix(in srgb, var(--color-text-primary) 62%, transparent);
+}
+
 .control-fan-design-slider .fan-slider-ruler span:nth-child(5n + 1) {
   width: 2px;
   height: 17px;
