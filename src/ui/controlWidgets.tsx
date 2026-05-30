@@ -163,22 +163,22 @@ export function AxisCrossControls({
           <button
             type="button"
             className="axis-cross-btn axis-cross-btn-labeled"
-            aria-label="Втянуть филамент"
+            aria-label="Выгрузить филамент"
             onClick={() => onFilamentMove?.(1)}
             disabled={disabled}
           >
             <span className="axis-cross-arrow" aria-hidden="true">↑</span>
-            <span className="axis-cross-btn-label">Втянуть</span>
+            <span className="axis-cross-btn-label">Выгрузить</span>
           </button>
           <button
             type="button"
             className="axis-cross-btn axis-cross-btn-labeled"
-            aria-label="Подать филамент"
+            aria-label="Загрузить филамент"
             onClick={() => onFilamentMove?.(-1)}
             disabled={disabled}
           >
             <span className="axis-cross-arrow" aria-hidden="true">↓</span>
-            <span className="axis-cross-btn-label">Подать</span>
+            <span className="axis-cross-btn-label">Загрузить</span>
           </button>
         </div>
       </div>

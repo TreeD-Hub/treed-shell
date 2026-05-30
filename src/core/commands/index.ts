@@ -1,2 +1,10 @@
-export type { CommandClient, CommandResult, PrinterCommandId } from './types'
+export type {
+  AxisId,
+  CommandClient,
+  CommandResult,
+  CommandSuccessResult,
+  CommandUnsupportedResult,
+  ExecuteCommandArgs,
+  PrinterCommandId,
+} from './types'
 export { usePrinterCommands } from './usePrinterCommands'

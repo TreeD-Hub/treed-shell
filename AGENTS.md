@@ -116,6 +116,9 @@
 - Tauri 2
 - local-first разработка с режимами `mock` и `live`
 - источник истины состояния принтера: Moonraker
+- `treed-shell` — UI-клиент/runtime-оболочка для репозитория [`TreeD-Hub/treed-mainshellOS`](https://github.com/TreeD-Hub/treed-mainshellOS)
+- `treed-mainshellOS` отвечает за железо, системный runtime, запуск UI-провайдера, fallback и интеграцию с устройством
+- на текущем этапе `treed-mainshellOS` работает на стоковом UI; `treed-shell` нельзя считать основным runtime по умолчанию без подтвержденного интеграционного контракта
 
 Ключевые точки проекта:
 - точка входа UI: `src/main.tsx`
@@ -165,6 +168,11 @@
 - менять формат ключевых данных, на которые опирается UI принтера.
 
 ### 7.3. Интеграция с `treed-mainshellOS`
+Контекст:
+- этот репозиторий отвечает за UI-клиент `treed-shell`, а не за железный/system runtime;
+- железо, системный запуск, fallback и текущий стоковый UI находятся в зоне ответственности [`TreeD-Hub/treed-mainshellOS`](https://github.com/TreeD-Hub/treed-mainshellOS);
+- любые изменения, которые делают `treed-shell` runtime-провайдером вместо стокового UI, требуют явного интеграционного контракта.
+
 Нельзя ломать:
 - контракт провайдера UI: `TREED_UI_PROVIDER=klipperscreen|treed-shell`;
 - обязательные интеграционные сценарии старта и fallback;

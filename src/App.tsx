@@ -302,12 +302,12 @@ const SETTINGS_NOTIFICATION_HISTORY: SettingsNotificationItem[] = [
   },
 ]
 const DEVICE_INFO_LINES = [
-  ['Модель', 'TreeD Shell Controller'],
-  ['Серийный номер', 'TRD-PI-240315-01'],
-  ['CPU', 'Raspberry Pi 4B (armv7l)'],
-  ['Память', '4 GB'],
-  ['MCU', 'STM32F446XX'],
-  ['Uptime', '2 д 7 ч 14 м'],
+  ['Модель', 'TreeD V2'],
+  ['Host', 'Rock Pi / Armbian Debian 12'],
+  ['Main MCU', 'Octopus Pro CAN'],
+  ['Toolhead MCU', 'EBB42 CAN'],
+  ['Probe', 'Eddy Duo CAN'],
+  ['Профиль', 'treed_v2_corexy_v1'],
 ] as const
 const CONSOLE_QUICK_COMMANDS = [
   'G28',
@@ -401,6 +401,7 @@ const MAINTENANCE_CHECKLIST_ITEMS = [
 const MAINTENANCE_PROGRESS_TICKS = Array.from({ length: 31 }, (_, index) => index)
 type MaintenanceChecklistItemId = (typeof MAINTENANCE_CHECKLIST_ITEMS)[number]['id']
 const IDLE_NOTES_DEFAULT_TEXT = [
+  'Экосистема TreeD V2.',
   'Перед запуском проверьте очистку стола и состояние поверхности.',
   'Если модель новая, сделайте короткий тест первого слоя.',
 ].join('\n')
@@ -457,13 +458,6 @@ function MaintenanceLineIcon({ name }: { name: MaintenanceIconName }) {
 
 function clampAxisValue(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
-}
-
-function snapValueByStep(value: number, min: number, max: number, step: number): number {
-  const safeStep = Math.max(1, step)
-  const clamped = clampAxisValue(value, min, max)
-  const steps = Math.round((clamped - min) / safeStep)
-  return clampAxisValue(min + (steps * safeStep), min, max)
 }
 
 function formatTuneKeyboardValue(value: number, fractionDigits: number): string {
@@ -542,7 +536,7 @@ const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard' | 'files' | 'set
 
 function App() {
   const { snapshot, refresh } = usePrinterSnapshot()
-  const { pendingCommand, executeCommand } = usePrinterCommands()
+  const { pendingCommand, executeCommand } = usePrinterCommands({ power: snapshot.capabilities.power })
   const screenShellRef = useRef<HTMLElement | null>(null)
   const topButtonRefs = useRef<Record<TopStatusButtonId, HTMLButtonElement | null>>({
     wifi: null,
@@ -553,6 +547,7 @@ function App() {
   const [babystepStep, setBabystepStep] = useState<number>(BABYSTEP_STEP_OPTIONS[1])
   const [activeTopPopup, setActiveTopPopup] = useState<TopStatusButtonId | null>(null)
   const [powerPopupNotice, setPowerPopupNotice] = useState<string>('')
+  const [isPowerShutdownArmed, setIsPowerShutdownArmed] = useState<boolean>(false)
   const [topPopupPosition, setTopPopupPosition] = useState<TopPopupPosition | null>(null)
   const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
   const [filesSortKey, setFilesSortKey] = useState<FilesSortKey>('name')
@@ -622,7 +617,7 @@ function App() {
   const [wifiPasswordValue, setWifiPasswordValue] = useState<string>('')
   const [isWifiPasswordVisible, setIsWifiPasswordVisible] = useState<boolean>(false)
   const [wifiConnectionNotice, setWifiConnectionNotice] = useState<string>('')
-  const [parkingMode, setParkingMode] = useState<ParkingMode>('all')
+  const [, setParkingMode] = useState<ParkingMode>('all')
   const [parkingAxis, setParkingAxis] = useState<AxisId>('X')
   const [movementMode, setMovementMode] = useState<MovementMode>('buttons')
   const [moveStepKey, setMoveStepKey] = useState<MoveStepKey>('1')
@@ -659,9 +654,20 @@ function App() {
   })
   const draggingIdleWidgetIdRef = useRef<IdleWidgetId | null>(null)
 
-  const printFill = Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
+  const displayPrintFileName = snapshot.source === 'live' && snapshot.printJob.isActive
+    ? snapshot.printJob.filename
+    : activePrintFileName
+  const printFill = snapshot.source === 'live'
+    ? Math.round(clampAxisValue(snapshot.printJob.progress * 100, 0, 100))
+    : Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
+  const displayLayerCurrent = snapshot.source === 'live'
+    ? (snapshot.printJob.currentLayer ?? DASHBOARD_VALUES.layerCurrent)
+    : DASHBOARD_VALUES.layerCurrent
+  const displayLayerTotal = snapshot.source === 'live'
+    ? (snapshot.printJob.totalLayer ?? DASHBOARD_VALUES.layerTotal)
+    : DASHBOARD_VALUES.layerTotal
   const isBusy = pendingCommand !== null
-  const hasActivePrint = activePrintFileName !== null
+  const hasActivePrint = displayPrintFileName !== null
   const activePrintTuneMeta = activePrintTuneGroup === null ? null : PRINT_TUNE_GROUP_META[activePrintTuneGroup]
   const isTemperatureTuneGroup = activePrintTuneGroup === 'nozzle' || activePrintTuneGroup === 'bed'
   const isCompactTuneKeyboardOpen = !isTemperatureTuneGroup && printTuneKeyboardTarget !== null
@@ -688,14 +694,42 @@ function App() {
   const connectionLabel = snapshot.connection === 'online' ? 'Подключено' : 'Офлайн'
   const wifiSsidLabel = snapshot.connection === 'online' ? snapshot.wifiSsid : 'Не подключено'
   const wifiIpLabel = snapshot.connection === 'online' ? snapshot.ipAddress : '—'
-  const cloudStatusLabel = snapshot.connection === 'online' ? 'В сети' : 'Не в сети'
+  const isNetworkCapabilityAvailable = snapshot.capabilities.network
+  const isCloudCapabilityAvailable = snapshot.capabilities.cloud
+  const isUpdatesCapabilityAvailable = snapshot.capabilities.updates
+  const isPowerCapabilityAvailable = snapshot.capabilities.power
+  const networkCapabilityNotice = isNetworkCapabilityAvailable
+    ? 'Выберите сеть и выполните подключение.'
+    : 'Недоступно: Moonraker/V2 Wi-Fi capability не подтвержден.'
+  const cloudStatusLabel = isCloudCapabilityAvailable && snapshot.connection === 'online' ? 'В сети' : 'Недоступно'
+  const cloudCapabilityNotice = isCloudCapabilityAvailable
+    ? cloudConnectionNotice
+    : 'Недоступно: Moonraker/V2 cloud capability не подтвержден.'
+  const updateCapabilityNotice = isUpdatesCapabilityAvailable
+    ? updateNotice
+    : 'Недоступно: Moonraker/V2 update capability не подтвержден.'
+  const powerCapabilityNotice = isPowerCapabilityAvailable
+    ? powerPopupNotice
+    : 'Недоступно: Moonraker machine power capability не подтвержден.'
+  const eddyStatusLabel = snapshot.v2.eddy.status === 'ready'
+    ? 'Eddy готов к Z-home/mesh'
+    : snapshot.v2.eddy.status === 'uncalibrated'
+      ? 'Eddy не калиброван'
+    : snapshot.v2.eddy.status === 'requires_xy_home'
+      ? 'Eddy требует homing XY'
+      : 'Eddy статус неизвестен'
   const idleNozzleTempValue = rounded(snapshot.extruderTemp)
   const idleBedTempValue = rounded(snapshot.bedTemp)
-  const effectiveActivePrintState = hasActivePrint ? (activePrintUiState ?? snapshot.state) : snapshot.state
+  const effectiveActivePrintState = snapshot.source === 'live'
+    ? snapshot.printJob.state
+    : hasActivePrint
+      ? (activePrintUiState ?? snapshot.state)
+      : snapshot.state
   const isPrintPaused = hasActivePrint && statusLabel(effectiveActivePrintState) === 'Пауза'
   const idleHeroStatusLabel = snapshot.connection === 'online' ? 'Ожидание печати' : 'Нет связи'
+  const effectiveFilesLibrary = snapshot.source === 'live' ? snapshot.printFiles : filesLibrary
   const sortedPrintFiles = useMemo(() => {
-    const nextItems = [...filesLibrary]
+    const nextItems = [...effectiveFilesLibrary]
 
     if (filesSortKey === 'addedAt') {
       nextItems.sort((left, right) => Date.parse(right.addedAt) - Date.parse(left.addedAt))
@@ -704,14 +738,14 @@ function App() {
 
     nextItems.sort((left, right) => left.name.localeCompare(right.name, 'en'))
     return nextItems
-  }, [filesLibrary, filesSortKey])
+  }, [effectiveFilesLibrary, filesSortKey])
   const selectedPrintFile = useMemo(() => {
     if (selectedFileId === null) {
       return null
     }
 
-    return filesLibrary.find((item) => item.id === selectedFileId) ?? null
-  }, [filesLibrary, selectedFileId])
+    return effectiveFilesLibrary.find((item) => item.id === selectedFileId) ?? null
+  }, [effectiveFilesLibrary, selectedFileId])
   const selectedWifiNetwork = useMemo(() => {
     if (selectedWifiNetworkId === null) {
       return null
@@ -745,6 +779,7 @@ function App() {
     [joystickVector.x, joystickVector.y],
   )
   const axisCoordinatesLabel = `X ${formatAxisCoordinate(printHeadPosition.x)}  Y ${formatAxisCoordinate(printHeadPosition.y)}  Z ${formatAxisCoordinate(printHeadPosition.z)}  E ${formatAxisCoordinate(printHeadPosition.e)}`
+  const printOffsetLabel = `Raw machine coords · print_offset_y ${formatAxisCoordinate(snapshot.toolhead.printOffsetY)} мм`
   const axisCoordinateItems = [
     { axis: 'X', value: formatAxisCoordinate(printHeadPosition.x) },
     { axis: 'Y', value: formatAxisCoordinate(printHeadPosition.y) },
@@ -958,6 +993,7 @@ function App() {
         return
       }
       setPowerPopupNotice('')
+      setIsPowerShutdownArmed(false)
       setTopPopupPosition(resolveTopPopupPosition(id))
       setActiveTopPopup(id)
     },
@@ -1359,11 +1395,13 @@ function App() {
       return
     }
 
-    if (activePrintFileName === selectedPrintFile.name) {
+    if (displayPrintFileName === selectedPrintFile.name) {
       setActivePrintFileName(null)
       setActivePrintUiState(null)
     }
-    setFilesLibrary((currentItems) => currentItems.filter((item) => item.id !== selectedPrintFile.id))
+    if (snapshot.source !== 'live') {
+      setFilesLibrary((currentItems) => currentItems.filter((item) => item.id !== selectedPrintFile.id))
+    }
     closeFileModal()
   }
 
@@ -1394,7 +1432,8 @@ function App() {
     }
     flashControlAction(nextMode === 'all' ? 'parking-all' : `parking-${resolvedAxis}`)
 
-    const ok = await executeCommand({ command: 'home' })
+    const command = nextMode === 'all' ? 'homeAll' : resolvedAxis === 'Z' ? 'homeZ' : 'homeXY'
+    const ok = await executeCommand({ command })
     if (!ok) {
       return
     }
@@ -1422,21 +1461,22 @@ function App() {
   }
 
   function handleAxisMove(axis: AxisId, direction: -1 | 1): void {
+    const distanceMm = direction * moveStepMm
     setPrintHeadPosition((prevPosition) => {
-      const delta = direction * moveStepMm
       return {
         ...prevPosition,
         x: axis === 'X'
-          ? clampAxisValue(prevPosition.x + delta, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max)
+          ? clampAxisValue(prevPosition.x + distanceMm, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max)
           : prevPosition.x,
         y: axis === 'Y'
-          ? clampAxisValue(prevPosition.y + delta, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max)
+          ? clampAxisValue(prevPosition.y + distanceMm, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max)
           : prevPosition.y,
         z: axis === 'Z'
-          ? clampAxisValue(prevPosition.z + delta, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max)
+          ? clampAxisValue(prevPosition.z + distanceMm, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max)
           : prevPosition.z,
       }
     })
+    void executeCommand({ command: 'moveAxis', axis, distanceMm })
   }
 
   function handleFilamentMove(direction: -1 | 1): void {
@@ -1445,7 +1485,7 @@ function App() {
       e: prevPosition.e - (direction * moveStepMm),
     }))
 
-    // Команды загрузки и выгрузки филамента будут подключены после интеграции backend.
+    void executeCommand({ command: direction > 0 ? 'unloadFilament' : 'loadFilament' })
   }
 
   function flashControlAction(nextKey: string): void {
@@ -1473,7 +1513,7 @@ function App() {
   }
 
   function handleMotorsDisable(): void {
-    // Команда отключения моторов будет подключена после интеграции backend.
+    void executeCommand({ command: 'consoleGcode', gcode: 'M84' })
   }
 
   function handleWifiSearchQueryChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -1684,7 +1724,7 @@ function App() {
     }
     setKeyboardCaret(activeKeyboardTarget, nextCaret)
   }, [activeKeyboardTarget, consoleCommandValue, idleNotesText, setKeyboardCaret, wifiPasswordValue, wifiSearchQuery])
-  const isIdleNotesKeyboardOpen = false
+  const isIdleNotesKeyboardOpen = activeKeyboardTarget === 'idleNotes'
   const handleIdleNotesKeyboardClose = handleKeyboardClose
   const handleIdleNotesKeyMouseDown = handleVirtualKeyboardKeyMouseDown
   const handleIdleNotesVirtualKey = handleVirtualKeyboardKey
@@ -1710,6 +1750,11 @@ function App() {
     ])
     setConsoleNotice(`Команда отправлена: ${trimmed}`)
     setConsoleCommandValue('')
+    void executeCommand({ command: 'consoleGcode', gcode: trimmed }).then((ok) => {
+      if (!ok) {
+        setConsoleNotice(`Команда не выполнена: ${trimmed}`)
+      }
+    })
   }
 
   useEffect(() => {
@@ -1846,12 +1891,12 @@ function App() {
     }
 
     setPrintHeadPosition((prevPosition) => normalizeHeadPosition({
-      x: snapshot.toolheadX,
-      y: snapshot.toolheadY,
-      z: snapshot.toolheadZ,
-      e: prevPosition.e,
+      x: snapshot.toolhead.rawX,
+      y: snapshot.toolhead.rawY,
+      z: snapshot.toolhead.rawZ,
+      e: snapshot.toolhead.rawE,
     }))
-  }, [movementMode, snapshot.toolheadX, snapshot.toolheadY, snapshot.toolheadZ])
+  }, [movementMode, snapshot.toolhead.rawX, snapshot.toolhead.rawY, snapshot.toolhead.rawZ, snapshot.toolhead.rawE])
 
   useEffect(() => {
     if (movementMode !== 'joystick' || (joystickVector.x === 0 && joystickVector.y === 0)) {
@@ -1890,8 +1935,24 @@ function App() {
     topButtonRefs.current[id] = node
   }
 
-  function handlePowerShutdownPlaceholder(): void {
-    setPowerPopupNotice('Команда выключения пока не подключена к backend.')
+  async function handlePowerShutdownAction(): Promise<void> {
+    if (!isPowerCapabilityAvailable) {
+      setPowerPopupNotice(powerCapabilityNotice)
+      return
+    }
+
+    if (!isPowerShutdownArmed) {
+      setIsPowerShutdownArmed(true)
+      setPowerPopupNotice('Подтвердите выключение повторным нажатием.')
+      return
+    }
+
+    const ok = await executeCommand({ command: 'shutdownHost' })
+    setIsPowerShutdownArmed(false)
+    if (ok) {
+      setPowerPopupNotice('Команда выключения отправлена.')
+      await refresh()
+    }
   }
 
   async function handlePause(): Promise<void> {
@@ -1988,19 +2049,31 @@ function App() {
 
     const normalized = Math.round(clampAxisValue(parsed, 0, 300))
     setTemperatureTargetValue(temperatureKeyboardTarget, normalized)
+    void executeCommand({
+      command: temperatureKeyboardTarget === 'nozzle' ? 'setNozzleTarget' : 'setBedTarget',
+      targetCelsius: normalized,
+    })
     closeTemperatureKeyboard()
   }
 
   function handleHeatingPresetApply(nozzle: number, bed: number): void {
     setPrintNozzleTargetTemp(nozzle)
     setPrintBedTargetTemp(bed)
+    void executeCommand({ command: 'consoleGcode', gcode: `M104 S${nozzle}\nM140 S${bed}` })
     closeTemperatureKeyboard()
   }
 
   function handleHeatingDisable(): void {
     setPrintNozzleTargetTemp(0)
     setPrintBedTargetTemp(0)
+    void executeCommand({ command: 'turnOffHeaters' })
     closeTemperatureKeyboard()
+  }
+
+  function handleFanPercentChange(nextValue: number): void {
+    const normalized = Math.round(clampAxisValue(nextValue, 0, 100))
+    setPrintFanPercent(normalized)
+    void executeCommand({ command: 'setFanPercent', percent: normalized })
   }
 
   function renderTemperatureKeyboardPanel(className = ''): ReactNode {
@@ -2037,9 +2110,8 @@ function App() {
             type="button"
             className="settings-network-btn print-temp-keyboard-key"
             onClick={handleTemperatureKeyboardBackspace}
-            aria-label="Стереть последнюю цифру"
           >
-            ←
+            Стереть
           </button>
           <button
             type="button"
@@ -2055,9 +2127,8 @@ function App() {
           type="button"
           className="settings-network-btn settings-network-btn-primary print-temp-keyboard-submit"
           onClick={handleTemperatureKeyboardSubmit}
-          aria-label="Ввести температуру"
         >
-          ✓
+          Ввод
         </button>
       </aside>
     )
@@ -2493,7 +2564,7 @@ function App() {
             min={0}
             max={100}
             step={5}
-            onChange={(nextValue) => setPrintFanPercent(Math.round(nextValue))}
+            onChange={handleFanPercentChange}
             testId="print-tune-fan-slider"
           />
         </div>
@@ -2621,7 +2692,7 @@ function App() {
         <div className="print-tune-modal-stack">
           <p className="print-tune-current-row">
             <span>Прогресс</span>
-            <strong>{DASHBOARD_VALUES.progressPercent}%</strong>
+            <strong>{printFill}%</strong>
           </p>
           <p className="print-tune-current-row">
             <span>Расчётное завершение</span>
@@ -2643,7 +2714,7 @@ function App() {
 
     return renderCompactTuneContent(
       <>
-        {renderCompactCurrentRow('Текущий слой', `${DASHBOARD_VALUES.layerCurrent} / ${DASHBOARD_VALUES.layerTotal}`)}
+        {renderCompactCurrentRow('Текущий слой', `${displayLayerCurrent} / ${displayLayerTotal}`)}
         <label className="print-tune-input-wrap print-tune-input-wrap-layer print-tune-input-wrap-layer-compact">
           <span>Пауза на слое</span>
           <input
@@ -2737,7 +2808,7 @@ function App() {
                 </div>
 
                 <div className="job-info">
-                  <p className="job-name">{activePrintFileName ?? DASHBOARD_VALUES.fileName}</p>
+                  <p className="job-name">{displayPrintFileName ?? DASHBOARD_VALUES.fileName}</p>
 
                   <button
                     type="button"
@@ -2749,7 +2820,7 @@ function App() {
                     <div className="job-metrics">
                       <div>
                         <p className="label">Прогресс</p>
-                        <p className="job-main-value">{DASHBOARD_VALUES.progressPercent}%</p>
+                        <p className="job-main-value">{printFill}%</p>
                       </div>
                       <div className="job-metrics-right">
                         <p className="label">Конец</p>
@@ -2772,7 +2843,7 @@ function App() {
                     <div className="job-layer-row">
                       <span className="label">Слой</span>
                       <strong>
-                        {DASHBOARD_VALUES.layerCurrent} / {DASHBOARD_VALUES.layerTotal}
+                        {displayLayerCurrent} / {displayLayerTotal}
                       </strong>
                     </div>
                   </button>
@@ -3164,7 +3235,7 @@ function App() {
                     </div>
                   ) : (
                     <p className="control-tab-label" data-testid="control-active-tab-label">
-                      {activeControlGroup === 'fans' ? 'Управление вентиляторами' : activeControlGroupOption.label}
+                      {activeControlGroupOption.label}
                     </p>
                   )}
                   <div className="control-scroll-area">
@@ -3225,7 +3296,7 @@ function App() {
 
                         <article className="control-card control-card-motion">
                           <div className="control-card-head">
-                            <h3 className="control-card-title">Ручное перемещение</h3>
+                            <h3 className="control-card-title">Оси</h3>
                           </div>
                           <SegmentedToggle
                             options={MOVEMENT_MODE_OPTIONS}
@@ -3251,6 +3322,9 @@ function App() {
                                       <span className="axis-coordinate-value">{item.value}</span>
                                     </span>
                                   ))}
+                                </p>
+                                <p className="axis-coordinate-mode" data-testid="axis-coordinate-mode">
+                                  {printOffsetLabel}
                                 </p>
                                 <div className="axis-home-status" aria-label="Статус хоуминга осей">
                                   {axisHomeStatuses.map((item) => (
@@ -3320,9 +3394,9 @@ function App() {
                                   <span className={`control-heating-sensor-icon is-${row.tone}`} aria-hidden="true">
                                     <IconMask name={row.icon} size={18} />
                                   </span>
-                                  <div className="control-heating-sensor-text">
-                                    <strong>{row.uiLabel}</strong>
-                                  </div>
+                                <div className="control-heating-sensor-text">
+                                  <h3>{row.uiLabel}</h3>
+                                </div>
                                 </div>
                                 <div className="control-heating-current">
                                   {rounded(row.current)} <span>°C</span>
@@ -3427,7 +3501,7 @@ function App() {
                               type="button"
                               className="control-fan-step-btn"
                               aria-label="Уменьшить скорость вентилятора на 5 процентов"
-                              onClick={() => setPrintFanPercent((currentValue) => Math.round(clampAxisValue(currentValue - 5, 0, 100)))}
+                              onClick={() => handleFanPercentChange(printFanPercent - 5)}
                               disabled={isBusy || printFanPercent <= 0}
                             >
                               -
@@ -3439,7 +3513,7 @@ function App() {
                                 min={0}
                                 max={100}
                                 step={5}
-                                onChange={(nextValue) => setPrintFanPercent(Math.round(nextValue))}
+                                onChange={handleFanPercentChange}
                                 disabled={isBusy}
                                 testId="control-fan-slider"
                               />
@@ -3455,7 +3529,7 @@ function App() {
                               type="button"
                               className="control-fan-step-btn"
                               aria-label="Увеличить скорость вентилятора на 5 процентов"
-                              onClick={() => setPrintFanPercent((currentValue) => Math.round(clampAxisValue(currentValue + 5, 0, 100)))}
+                              onClick={() => handleFanPercentChange(printFanPercent + 5)}
                               disabled={isBusy || printFanPercent >= 100}
                             >
                               +
@@ -3474,7 +3548,7 @@ function App() {
                                     type="button"
                                     className={`control-fan-preset-btn${isActive ? ' is-active' : ''}`}
                                     aria-pressed={isActive}
-                                    onClick={() => setPrintFanPercent(preset.value)}
+                                    onClick={() => handleFanPercentChange(preset.value)}
                                     disabled={isBusy}
                                   >
                                     <span className="control-fan-preset-dot" aria-hidden="true" />
@@ -3494,6 +3568,9 @@ function App() {
                       </article>
                     ) : activeControlGroup === 'lighting' ? (
                       <article className="control-card-lighting">
+                        <div className="control-card-head">
+                          <h3 className="control-card-title">Подсветка</h3>
+                        </div>
                         <div className="control-lighting-list" role="group" aria-label="Управление подсветкой">
                           <button
                             type="button"
@@ -3782,6 +3859,7 @@ function App() {
                       <header className="settings-group-head">
                         <h3>Карта стола</h3>
                         <p>Ручная и автоматическая калибровка плоскости стола.</p>
+                        <p data-testid="eddy-runtime-status">{eddyStatusLabel}</p>
                       </header>
 
                       {bedCalibrationStage === 'manual' ? (
@@ -4182,10 +4260,11 @@ function App() {
                                 type="search"
                                 value={wifiSearchQuery}
                                 onChange={handleWifiSearchQueryChange}
-                                onFocus={handleWifiSearchInputFocus}
-                                onClick={handleWifiSearchInputFocus}
+                                onFocus={isNetworkCapabilityAvailable ? handleWifiSearchInputFocus : undefined}
+                                onClick={isNetworkCapabilityAvailable ? handleWifiSearchInputFocus : undefined}
                                 placeholder="Введите имя сети"
                                 data-testid="settings-network-search"
+                                disabled={!isNetworkCapabilityAvailable}
                               />
                             </label>
                             <button
@@ -4193,6 +4272,7 @@ function App() {
                               className="settings-network-btn settings-network-btn-primary"
                               onClick={handleWifiScan}
                               data-testid="settings-network-scan"
+                              disabled={!isNetworkCapabilityAvailable}
                             >
                               Поиск
                             </button>
@@ -4208,6 +4288,7 @@ function App() {
                                   aria-pressed={selectedWifiNetworkId === network.id}
                                   onClick={() => handleWifiNetworkSelect(network.id)}
                                   data-testid={`settings-network-item-${network.id}`}
+                                  disabled={!isNetworkCapabilityAvailable}
                                 >
                                   <div className="settings-network-item-copy">
                                     <strong>{network.ssid}</strong>
@@ -4244,16 +4325,18 @@ function App() {
                                       type={isWifiPasswordVisible ? 'text' : 'password'}
                                       value={wifiPasswordValue}
                                       onChange={handleWifiPasswordChange}
-                                      onFocus={handleWifiPasswordInputFocus}
-                                      onClick={handleWifiPasswordInputFocus}
+                                      onFocus={isNetworkCapabilityAvailable ? handleWifiPasswordInputFocus : undefined}
+                                      onClick={isNetworkCapabilityAvailable ? handleWifiPasswordInputFocus : undefined}
                                       placeholder="Введите пароль"
                                       data-testid="settings-network-password-input"
+                                      disabled={!isNetworkCapabilityAvailable}
                                     />
                                     <button
                                       type="button"
                                       className="settings-network-btn"
                                       onClick={handleWifiPasswordVisibilityToggle}
                                       data-testid="settings-network-password-visibility"
+                                      disabled={!isNetworkCapabilityAvailable}
                                     >
                                       {isWifiPasswordVisible ? 'Скрыть' : 'Показать'}
                                     </button>
@@ -4269,6 +4352,7 @@ function App() {
                                   className="settings-network-btn settings-network-btn-primary"
                                   onClick={handleWifiConnect}
                                   data-testid="settings-network-connect-button"
+                                  disabled={!isNetworkCapabilityAvailable}
                                 >
                                   Подключить
                                 </button>
@@ -4277,6 +4361,7 @@ function App() {
                                   className="settings-network-btn"
                                   onClick={handleWifiForgetSelected}
                                   data-testid="settings-network-forget-button"
+                                  disabled={!isNetworkCapabilityAvailable}
                                 >
                                   Забыть сеть
                                 </button>
@@ -4288,7 +4373,9 @@ function App() {
                               </article>
 
                               <p className="settings-network-notice" data-testid="settings-network-notice">
-                                {wifiConnectionNotice.length > 0 ? wifiConnectionNotice : 'Выберите сеть и выполните подключение.'}
+                                {isNetworkCapabilityAvailable && wifiConnectionNotice.length > 0
+                                  ? wifiConnectionNotice
+                                  : networkCapabilityNotice}
                               </p>
                             </>
                           ) : (
@@ -4339,6 +4426,7 @@ function App() {
                           className="settings-network-btn settings-network-btn-primary"
                           onClick={handleCloudConnectionToggle}
                           data-testid="settings-cloud-connect-toggle"
+                          disabled={!isCloudCapabilityAvailable}
                         >
                           {isCloudConnected ? 'Отключить облако' : 'Подключить облако'}
                         </button>
@@ -4348,13 +4436,14 @@ function App() {
                         checked={isCloudAiMonitoringEnabled}
                         onChange={handleCloudAiMonitoringToggle}
                         testId="settings-cloud-ai-toggle"
+                        disabled={!isCloudCapabilityAvailable}
                       />
                       <article className="settings-description-card">
                         <p><span>Статус</span><strong>{isCloudConnected ? 'Подключено' : 'Не подключено'}</strong></p>
                         <p><span>Сервис</span><strong>TreeD Cloud Guard</strong></p>
                         <p><span>Режим AI</span><strong>{isCloudAiMonitoringEnabled ? 'Включен' : 'Выключен'}</strong></p>
                       </article>
-                      <p className="settings-cloud-notice">{cloudConnectionNotice}</p>
+                      <p className="settings-cloud-notice">{cloudCapabilityNotice}</p>
                     </div>
                   ) : activeSettingsGroup === 'device' ? (
                     <div className="settings-group-stack">
@@ -4384,12 +4473,12 @@ function App() {
                           className="settings-network-btn settings-network-btn-primary"
                           onClick={handleCheckUpdates}
                           data-testid="settings-check-updates-button"
-                          disabled={isCheckingUpdates}
+                          disabled={isCheckingUpdates || !isUpdatesCapabilityAvailable}
                         >
                           {isCheckingUpdates ? 'Проверка...' : 'Проверить обновления'}
                         </button>
                       </div>
-                      <p className="settings-cloud-notice">{updateNotice}</p>
+                      <p className="settings-cloud-notice">{updateCapabilityNotice}</p>
                     </div>
                   ) : activeSettingsGroup === 'language' ? (
                     <div className="settings-group-stack">
@@ -4539,7 +4628,7 @@ function App() {
           ))}
         </nav>
 
-        {activeKeyboardTarget !== null ? (
+        {activeKeyboardTarget !== null && activeKeyboardTarget !== 'idleNotes' ? (
           <div
             className="app-virtual-keyboard-layer"
             role="presentation"
@@ -4866,20 +4955,24 @@ function App() {
                       <dd>{cloudStatusLabel}</dd>
                     </div>
                   </dl>
-                  <a
-                    className="top-popup-qr-link"
-                    href={CLOUD_LINK_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Открыть treed.pro для добавления устройства"
-                  >
-                    <img
-                      className="top-popup-qr-image"
-                      src={CLOUD_QR_IMAGE_URL}
-                      alt="QR-код для перехода на treed.pro"
-                    />
-                    <span>Сканируйте QR или откройте treed.pro</span>
-                  </a>
+                  {isCloudCapabilityAvailable ? (
+                    <a
+                      className="top-popup-qr-link"
+                      href={CLOUD_LINK_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Открыть treed.pro для добавления устройства"
+                    >
+                      <img
+                        className="top-popup-qr-image"
+                        src={CLOUD_QR_IMAGE_URL}
+                        alt="QR-код для перехода на treed.pro"
+                      />
+                      <span>Сканируйте QR или откройте treed.pro</span>
+                    </a>
+                  ) : (
+                    <p className="top-popup-secondary">{cloudCapabilityNotice}</p>
+                  )}
                 </div>
               ) : null}
 
@@ -4896,11 +4989,18 @@ function App() {
               {activeTopPopup === 'power' ? (
                 <div className="top-popup-content">
                   <p className="top-popup-warning">
-                    Выключение принтера остановит текущую задачу и потребует ручного запуска питания.
+                    {isPowerCapabilityAvailable
+                      ? 'Выключение принтера остановит текущую задачу и потребует ручного запуска питания.'
+                      : powerCapabilityNotice}
                   </p>
                   <div className="top-popup-actions">
-                    <button type="button" className="top-popup-action top-popup-action-danger" onClick={handlePowerShutdownPlaceholder}>
-                      Выключить принтер
+                    <button
+                      type="button"
+                      className="top-popup-action top-popup-action-danger"
+                      onClick={() => void handlePowerShutdownAction()}
+                      disabled={!isPowerCapabilityAvailable || isBusy}
+                    >
+                      {isPowerShutdownArmed ? 'Подтвердить выключение' : 'Выключить принтер'}
                     </button>
                     <button type="button" className="top-popup-action" onClick={closeTopPopup}>
                       Отмена

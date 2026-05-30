@@ -91,6 +91,7 @@ type SettingsToggleRowProps = {
   checked: boolean
   onChange: (nextValue: boolean) => void
   testId?: string
+  disabled?: boolean
 }
 
 export function SettingsToggleRow({
@@ -98,6 +99,7 @@ export function SettingsToggleRow({
   checked,
   onChange,
   testId,
+  disabled = false,
 }: SettingsToggleRowProps) {
   return (
     <button
@@ -105,6 +107,7 @@ export function SettingsToggleRow({
       className="settings-toggle-row"
       aria-pressed={checked}
       data-testid={testId}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
     >
       <span className="settings-toggle-label">{label}</span>

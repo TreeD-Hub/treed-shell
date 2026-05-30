@@ -1,34 +1,61 @@
 import { moonrakerUrl } from '../../config'
+import {
+  normalizeMoonrakerRuntimeSnapshot,
+  type MoonrakerObjectsQueryPayload,
+  type MoonrakerPrintFileInput,
+  type MoonrakerPrintFileMetadata,
+} from './moonrakerNormalizer'
 import type { PrinterSnapshot, TransportClient } from './types'
 
 type MoonrakerResponse<T> = {
   result?: T
 }
 
-type PrinterInfoResult = {
-  state?: string
+type NormalizeMoonrakerSnapshotInput = {
+  source?: 'mock' | 'live'
+  moonrakerUrl?: string
+  nowIso?: string
+  info?: {
+    state?: string
+  }
+  objects?: MoonrakerObjectsQueryPayload
+  files?: MoonrakerPrintFileInput[]
+  fileMetadata?: Record<string, MoonrakerPrintFileMetadata>
 }
 
-type ObjectsQueryResult = {
-  status?: {
-    toolhead?: {
-      position?: [number, number, number]
-      homed_axes?: string
-    }
-    extruder?: {
-      temperature?: number
-    }
-    heater_bed?: {
-      temperature?: number
-    }
-    fan?: {
-      speed?: number
-    }
-    print_stats?: {
-      state?: string
-    }
-  }
+type MoonrakerFileListItem = {
+  path?: string
+  filename?: string
+  modified?: number
+  size?: number
 }
+
+const MOONRAKER_RUNTIME_OBJECTS = [
+  'webhooks',
+  'toolhead',
+  'gcode_move',
+  'print_stats',
+  'virtual_sdcard',
+  'extruder',
+  'heater_bed',
+  'fan',
+  'display_status',
+  'pause_resume',
+  'gcode_macro _TREED_PROFILE',
+  'gcode_macro _TREED_GEOMETRY_CFG',
+  'gcode_macro _TREED_PAUSE_STATE',
+  'gcode_macro _TREED_CAM_STATE',
+  'gcode_macro _TREED_EDDY_Z_OFFSET_AUTOSAVE_STATE',
+  'gcode_macro _TREED_SYSTEM_POWER',
+  'gcode_macro _TREED_CLOUD',
+  'gcode_macro _TREED_UPDATES',
+  'gcode_macro _TREED_CAMERA',
+  'gcode_macro _TREED_SERVICE_COMMANDS',
+] as const
+
+export const MOONRAKER_RUNTIME_OBJECTS_QUERY = `/printer/objects/query?${MOONRAKER_RUNTIME_OBJECTS
+  .map((objectName) => encodeURIComponent(objectName))
+  .join('&')}`
 
 async function fetchMoonraker<T>(path: string): Promise<T> {
   const response = await fetch(`${moonrakerUrl}${path}`)
@@ -46,42 +73,82 @@ async function fetchMoonraker<T>(path: string): Promise<T> {
   return payload.result
 }
 
+function getMoonrakerFilePath(item: MoonrakerFileListItem): string {
+  return item.path ?? item.filename ?? ''
+}
+
+async function fetchPrintFileWithMetadata(item: MoonrakerFileListItem): Promise<MoonrakerPrintFileInput> {
+  const path = getMoonrakerFilePath(item)
+
+  if (!path.toLowerCase().endsWith('.gcode')) {
+    return item
+  }
+
+  try {
+    const metadata = await fetchMoonraker<MoonrakerPrintFileMetadata>(
+      `/server/files/metadata?filename=${encodeURIComponent(path)}`,
+    )
+
+    return {
+      ...item,
+      path,
+      metadata,
+    }
+  } catch {
+    return {
+      ...item,
+      path,
+    }
+  }
+}
+
+async function fetchPrintFiles(): Promise<MoonrakerPrintFileInput[]> {
+  const items = await fetchMoonraker<MoonrakerFileListItem[]>('/server/files/list?root=gcodes')
+
+  return Promise.all(items.map(fetchPrintFileWithMetadata))
+}
+
+export function normalizeMoonrakerSnapshot(input: NormalizeMoonrakerSnapshotInput): PrinterSnapshot {
+  const status = input.objects?.status ?? {}
+  const files = (input.files ?? []).map((file) => {
+    const path = getMoonrakerFilePath(file)
+
+    return {
+      ...file,
+      path,
+      metadata: file.metadata ?? input.fileMetadata?.[path],
+    }
+  })
+
+  return normalizeMoonrakerRuntimeSnapshot(
+    {
+      ...input.objects,
+      status: {
+        ...status,
+        webhooks: {
+          state: input.objects?.status?.webhooks?.state ?? input.info?.state,
+          state_message: input.objects?.status?.webhooks?.state_message,
+        },
+      },
+    },
+    {
+      source: input.source ?? 'live',
+      moonrakerUrl: input.moonrakerUrl,
+      nowIso: input.nowIso,
+      printFiles: files,
+    },
+  )
+}
+
 export function createMoonrakerClient(): TransportClient {
   return {
     async fetchSnapshot(): Promise<PrinterSnapshot> {
-      const endpointHost = (() => {
-        try {
-          return new URL(moonrakerUrl).hostname || 'unknown'
-        } catch {
-          return 'unknown'
-        }
-      })()
-      const [info, objects] = await Promise.all([
-        fetchMoonraker<PrinterInfoResult>('/printer/info'),
-        fetchMoonraker<ObjectsQueryResult>(
-          '/printer/objects/query?toolhead&extruder&heater_bed&fan&print_stats',
-        ),
+      const [objects, printFiles] = await Promise.all([
+        fetchMoonraker<MoonrakerObjectsQueryPayload>(MOONRAKER_RUNTIME_OBJECTS_QUERY),
+        fetchPrintFiles(),
       ])
 
-      const state = objects.status?.print_stats?.state ?? info.state ?? 'unknown'
-      const toolheadPosition = objects.status?.toolhead?.position ?? [0, 0, 0]
-
-      return {
-        source: 'live',
-        connection: 'online',
-        wifiSsid: 'Moonraker Network',
-        ipAddress: endpointHost,
-        state,
-        toolheadX: Number(toolheadPosition[0] ?? 0),
-        toolheadY: Number(toolheadPosition[1] ?? 0),
-        toolheadZ: Number(toolheadPosition[2] ?? 0),
-        homedAxes: objects.status?.toolhead?.homed_axes ?? '',
-        extruderTemp: Number(objects.status?.extruder?.temperature ?? 0),
-        bedTemp: Number(objects.status?.heater_bed?.temperature ?? 0),
-        modelFanPercent: Math.max(0, Math.min(100, Number(objects.status?.fan?.speed ?? 0) * 100)),
-        updatedAt: new Date().toISOString(),
-        message: `Moonraker: ${moonrakerUrl}`,
-      }
+      return normalizeMoonrakerRuntimeSnapshot(objects, { moonrakerUrl, source: 'live', printFiles })
     },
   }
 }

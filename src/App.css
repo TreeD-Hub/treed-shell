@@ -2969,7 +2969,8 @@ body {
   display: grid;
 }
 
-.control-heating-sensor-text strong {
+.control-heating-sensor-text h3 {
+  margin: 0;
   font-size: var(--font-size-body-large);
   line-height: 1.1;
   font-weight: var(--font-weight-medium);
@@ -3677,6 +3678,14 @@ body {
 
 .axis-coordinate-value {
   color: var(--color-text-primary);
+}
+
+.axis-coordinate-mode {
+  margin: 0;
+  font-size: var(--font-size-tiny);
+  line-height: 1.1;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
 }
 
 .axis-home-status {
