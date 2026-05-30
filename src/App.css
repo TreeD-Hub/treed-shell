@@ -1246,11 +1246,6 @@ body {
   cursor: pointer;
 }
 
-.control-card-lighting .settings-toggle-row {
-  border-color: color-mix(in srgb, var(--color-border-default) 42%, transparent);
-  background: color-mix(in srgb, var(--color-block-surface) 42%, transparent);
-}
-
 .settings-toggle-switch {
   flex: 0 0 auto;
   width: 52px;
@@ -2701,7 +2696,207 @@ body {
 }
 
 .control-card-lighting {
-  gap: var(--space-xs);
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  padding: 12px;
+  gap: 12px;
+  align-content: start;
+  overflow: hidden;
+}
+
+.control-card-lighting::after {
+  content: none;
+}
+
+.control-lighting-list {
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.control-lighting-row {
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 76px 16px;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.control-lighting-row:active {
+  transform: translateY(1px);
+}
+
+.control-lighting-icon {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-border-default) 54%, transparent);
+  background: color-mix(in srgb, var(--color-block-surface) 30%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.control-lighting-icon.is-main::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 13px;
+  height: 9px;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 7px 7px;
+}
+
+.control-lighting-icon.is-main::after {
+  content: '';
+  position: absolute;
+  left: 13px;
+  right: 13px;
+  top: 24px;
+  height: 12px;
+  background:
+    linear-gradient(115deg, transparent 0 43%, currentColor 44% 48%, transparent 49% 100%) 0 0 / 8px 100%,
+    linear-gradient(90deg, transparent 0 47%, currentColor 48% 52%, transparent 53% 100%) center / 8px 100%,
+    linear-gradient(65deg, transparent 0 43%, currentColor 44% 48%, transparent 49% 100%) right / 8px 100%;
+  background-repeat: no-repeat;
+  opacity: 0.9;
+}
+
+.control-lighting-icon.is-toolhead::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  top: 13px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.control-lighting-icon.is-toolhead::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 25px;
+  height: 11px;
+  background:
+    radial-gradient(circle, currentColor 0 1.2px, transparent 1.45px) 0 0 / 6px 6px;
+  opacity: 0.88;
+}
+
+.control-lighting-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.control-lighting-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-accent);
+  font-size: var(--font-size-body-large);
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-lighting-state {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1;
+}
+
+.control-lighting-state::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+.control-lighting-row.is-active .control-lighting-state {
+  color: var(--color-primary);
+}
+
+.control-lighting-row.is-active .control-lighting-icon {
+  color: var(--color-text-primary);
+  border-color: color-mix(in srgb, var(--color-border-default) 72%, transparent);
+}
+
+.control-lighting-switch {
+  position: relative;
+  justify-self: end;
+  width: 62px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 72%, transparent);
+  background: color-mix(in srgb, var(--color-block-surface) 20%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.control-lighting-switch-knob {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--color-text-secondary);
+  transition:
+    left 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.control-lighting-switch-mark {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-52%);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.control-lighting-row.is-active .control-lighting-switch {
+  border-color: var(--color-primary-ring);
+  color: var(--color-primary);
+}
+
+.control-lighting-row.is-active .control-lighting-switch-knob {
+  left: 33px;
+  background: var(--color-primary);
+  box-shadow: 0 0 14px var(--color-primary-glow);
+}
+
+.control-lighting-row.is-active .control-lighting-switch-mark {
+  left: 15px;
+  right: auto;
+}
+
+.control-lighting-more {
+  width: 4px;
+  height: 22px;
+  justify-self: end;
+  background:
+    radial-gradient(circle, currentColor 0 1.6px, transparent 1.8px) 0 0 / 4px 9px;
+  color: var(--color-text-soft);
 }
 
 .control-heating-main {

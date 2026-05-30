@@ -3085,7 +3085,7 @@ function App() {
 
                 <div className="settings-content-shell control-content-shell">
                   <p className="control-tab-label" data-testid="control-active-tab-label">
-                    {activeControlGroupOption.label}
+                    {activeControlGroup === 'fans' ? 'Управление вентиляторами' : activeControlGroupOption.label}
                   </p>
                   <div className="control-scroll-area">
                     {activeControlGroup === 'movement' ? (
@@ -3413,20 +3413,46 @@ function App() {
                         </div>
                       </article>
                     ) : activeControlGroup === 'lighting' ? (
-                      <article className="control-card control-card-lighting">
-                        <h3 className="control-card-title">Подсветка</h3>
-                        <SettingsToggleRow
-                          label="Основной свет"
-                          checked={isMainLightEnabled}
-                          onChange={setIsMainLightEnabled}
-                          testId="control-light-main"
-                        />
-                        <SettingsToggleRow
-                          label="Подсветка ПГ"
-                          checked={isToolheadLightEnabled}
-                          onChange={setIsToolheadLightEnabled}
-                          testId="control-light-toolhead"
-                        />
+                      <article className="control-card-lighting">
+                        <div className="control-lighting-list" role="group" aria-label="Управление подсветкой">
+                          <button
+                            type="button"
+                            className={`control-lighting-row control-subpanel${isMainLightEnabled ? ' is-active' : ''}`}
+                            aria-pressed={isMainLightEnabled}
+                            data-testid="control-light-main"
+                            onClick={() => setIsMainLightEnabled(!isMainLightEnabled)}
+                          >
+                            <span className="control-lighting-icon is-main" aria-hidden="true" />
+                            <span className="control-lighting-copy">
+                              <span className="control-lighting-title">Основной свет</span>
+                              <span className="control-lighting-state">{isMainLightEnabled ? 'Вкл' : 'Выкл'}</span>
+                            </span>
+                            <span className="control-lighting-switch" aria-hidden="true">
+                              <span className="control-lighting-switch-knob" />
+                              <span className="control-lighting-switch-mark">{isMainLightEnabled ? '+' : '-'}</span>
+                            </span>
+                            <span className="control-lighting-more" aria-hidden="true" />
+                          </button>
+
+                          <button
+                            type="button"
+                            className={`control-lighting-row control-subpanel${isToolheadLightEnabled ? ' is-active' : ''}`}
+                            aria-pressed={isToolheadLightEnabled}
+                            data-testid="control-light-toolhead"
+                            onClick={() => setIsToolheadLightEnabled(!isToolheadLightEnabled)}
+                          >
+                            <span className="control-lighting-icon is-toolhead" aria-hidden="true" />
+                            <span className="control-lighting-copy">
+                              <span className="control-lighting-title">Подсветка ПГ</span>
+                              <span className="control-lighting-state">{isToolheadLightEnabled ? 'Вкл' : 'Выкл'}</span>
+                            </span>
+                            <span className="control-lighting-switch" aria-hidden="true">
+                              <span className="control-lighting-switch-knob" />
+                              <span className="control-lighting-switch-mark">{isToolheadLightEnabled ? '+' : '-'}</span>
+                            </span>
+                            <span className="control-lighting-more" aria-hidden="true" />
+                          </button>
+                        </div>
                       </article>
                     ) : (
                       <article className="control-card control-card-maintenance-placeholder">
