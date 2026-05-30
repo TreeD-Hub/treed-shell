@@ -224,6 +224,13 @@ const HEATING_PRESET_OPTIONS = [
   { id: 'abs', label: 'ABS', nozzle: 245, bed: 100 },
   { id: 'petg', label: 'PETG', nozzle: 235, bed: 80 },
 ] as const
+const FAN_PRESET_OPTIONS = [
+  { id: 'off', label: 'Откл.', value: 0 },
+  { id: 'low', label: 'Низкий', value: 25 },
+  { id: 'medium', label: 'Средний', value: 50 },
+  { id: 'high', label: 'Высокий', value: 75 },
+  { id: 'max', label: 'Макс.', value: 100 },
+] as const
 const SETTINGS_GROUP_OPTIONS: Array<SettingsMenuOption<SettingsGroupId>> = [
   { id: 'network', label: 'Сеть', icon: 'statusWifi' },
   { id: 'system', label: 'Система', icon: 'menuSettings' },
@@ -3323,19 +3330,87 @@ function App() {
                       </div>
                     ) : activeControlGroup === 'fans' ? (
                       <article className="control-card control-card-fan">
-                        <div className="control-card-head">
-                          <h3 className="control-card-title">Обдув модели</h3>
-                          <p className="control-card-value">{printFanPercent}%</p>
+                        <div className="control-fan-body">
+                          <section className="control-fan-summary" aria-label="Текущее состояние вентилятора">
+                            <div className="control-fan-summary-copy">
+                              <h4>Обдув модели</h4>
+                              <p>Охлаждение / воздушный поток</p>
+                            </div>
+                            <div className="control-fan-summary-value">
+                              <strong>{printFanPercent}%</strong>
+                              <span>Скорость вентилятора</span>
+                            </div>
+                          </section>
+
+                          <section className="control-fan-slider-panel control-subpanel" aria-label="Регулировка скорости вентилятора">
+                            <button
+                              type="button"
+                              className="control-fan-step-btn"
+                              aria-label="Уменьшить скорость вентилятора на 5 процентов"
+                              onClick={() => setPrintFanPercent((currentValue) => Math.round(clampAxisValue(currentValue - 5, 0, 100)))}
+                              disabled={isBusy || printFanPercent <= 0}
+                            >
+                              -
+                            </button>
+                            <div className="control-fan-slider-core">
+                              <HorizontalSteppedSlider
+                                className="control-fan-design-slider"
+                                value={printFanPercent}
+                                min={0}
+                                max={100}
+                                step={5}
+                                onChange={(nextValue) => setPrintFanPercent(Math.round(nextValue))}
+                                disabled={isBusy}
+                                testId="control-fan-slider"
+                              />
+                              <div className="control-fan-slider-labels" aria-hidden="true">
+                                <span>0</span>
+                                <span>25</span>
+                                <span>50</span>
+                                <span>75</span>
+                                <span>100%</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="control-fan-step-btn"
+                              aria-label="Увеличить скорость вентилятора на 5 процентов"
+                              onClick={() => setPrintFanPercent((currentValue) => Math.round(clampAxisValue(currentValue + 5, 0, 100)))}
+                              disabled={isBusy || printFanPercent >= 100}
+                            >
+                              +
+                            </button>
+                          </section>
+
+                          <section className="control-fan-presets" aria-labelledby="control-fan-presets-title">
+                            <p id="control-fan-presets-title">Предустановки</p>
+                            <div className="control-fan-preset-row" role="group" aria-label="Предустановки вентилятора">
+                              {FAN_PRESET_OPTIONS.map((preset) => {
+                                const isActive = printFanPercent === preset.value
+
+                                return (
+                                  <button
+                                    key={preset.id}
+                                    type="button"
+                                    className={`control-fan-preset-btn${isActive ? ' is-active' : ''}`}
+                                    aria-pressed={isActive}
+                                    onClick={() => setPrintFanPercent(preset.value)}
+                                    disabled={isBusy}
+                                  >
+                                    <span className="control-fan-preset-dot" aria-hidden="true" />
+                                    <span>{preset.label}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </section>
+
+                          <section className="control-fan-note control-subpanel">
+                            <span className="control-fan-info-icon" aria-hidden="true">i</span>
+                            <p>Регулирует интенсивность обдува модели для улучшения качества печати.</p>
+                            <IconMask name="metricFan" size={44} className="control-fan-note-icon" />
+                          </section>
                         </div>
-                        <HorizontalSteppedSlider
-                          value={printFanPercent}
-                          min={0}
-                          max={100}
-                          step={5}
-                          onChange={(nextValue) => setPrintFanPercent(Math.round(nextValue))}
-                          disabled={isBusy}
-                          testId="control-fan-slider"
-                        />
                       </article>
                     ) : activeControlGroup === 'lighting' ? (
                       <article className="control-card control-card-lighting">

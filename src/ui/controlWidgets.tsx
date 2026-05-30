@@ -573,6 +573,7 @@ export function HorizontalSteppedSlider({
           <span
             key={`fan-tick-${index}`}
             className={index % 4 === 0 ? 'is-major' : undefined}
+            style={{ '--fan-slider-tick-position': `${rulerTicksCount > 1 ? (index / (rulerTicksCount - 1)) * 100 : 0}%` } as CSSProperties}
           />
         ))}
       </div>
