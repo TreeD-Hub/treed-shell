@@ -2699,8 +2699,8 @@ body {
   min-height: 0;
   height: 100%;
   display: grid;
-  padding: 12px;
-  gap: 12px;
+  padding: 0;
+  gap: 8px;
   align-content: start;
   overflow: hidden;
 }
@@ -2712,15 +2712,15 @@ body {
 .control-lighting-list {
   min-height: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .control-lighting-row {
   min-width: 0;
-  min-height: 64px;
-  padding: 10px 12px;
+  min-height: 62px;
+  padding: 8px 10px;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 76px 16px;
+  grid-template-columns: 48px minmax(92px, 1fr) minmax(188px, 226px) 16px;
   align-items: center;
   gap: 12px;
   color: var(--color-text-primary);
