@@ -125,8 +125,14 @@ function commandSuccessMessage(args: ExecuteCommandArgs): string {
       return 'Console G-code sent'
     case 'rebootHost':
       return 'Host reboot sent'
+    case 'restartKlipper':
+      return 'Klipper restart sent'
+    case 'firmwareRestart':
+      return 'Firmware restart sent'
+    case 'restartMoonraker':
+      return 'Moonraker restart sent'
     case 'shutdownHost':
-      return 'Shutdown host is unsupported in this client'
+      return 'Host shutdown sent'
     default:
       return 'Command sent'
   }
@@ -213,6 +219,12 @@ function executeMoonrakerCommand(
         return buildUnsupportedResult(args.command, 'Host reboot is not supported through this Moonraker client')
       }
       return callMoonraker('/machine/reboot', undefined, options)
+    case 'restartKlipper':
+      return callMoonraker('/printer/restart', undefined, options)
+    case 'firmwareRestart':
+      return callMoonraker('/printer/firmware_restart', undefined, options)
+    case 'restartMoonraker':
+      return callMoonraker('/server/restart', undefined, options)
     case 'shutdownHost':
       if (options.capabilities.power === true) {
         return callMoonraker('/machine/shutdown', undefined, options)

@@ -51,6 +51,12 @@ function buildMessage(args: ExecuteCommandArgs): string {
       return 'Mock: console G-code sent'
     case 'rebootHost':
       return 'Mock: host reboot requested'
+    case 'restartKlipper':
+      return 'Mock: Klipper restart requested'
+    case 'firmwareRestart':
+      return 'Mock: firmware restart requested'
+    case 'restartMoonraker':
+      return 'Mock: Moonraker restart requested'
     case 'shutdownHost':
       return 'Mock: shutdown host is unsupported'
     default:

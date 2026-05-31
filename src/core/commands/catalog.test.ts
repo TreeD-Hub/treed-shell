@@ -32,6 +32,9 @@ const ALL_COMMAND_IDS: PrinterCommandId[] = [
   'xyMotionTest',
   'consoleGcode',
   'rebootHost',
+  'restartKlipper',
+  'firmwareRestart',
+  'restartMoonraker',
   'shutdownHost',
 ]
 
@@ -106,6 +109,9 @@ describe('TREE_D_COMMAND_CATALOG', () => {
     expect(isDangerousTreeDCommand('emergencyStop')).toBe(true)
     expect(isDangerousTreeDCommand('consoleGcode')).toBe(true)
     expect(isDangerousTreeDCommand('rebootHost')).toBe(true)
+    expect(isDangerousTreeDCommand('restartKlipper')).toBe(true)
+    expect(isDangerousTreeDCommand('firmwareRestart')).toBe(true)
+    expect(isDangerousTreeDCommand('restartMoonraker')).toBe(true)
     expect(isDangerousTreeDCommand('shutdownHost')).toBe(true)
 
     expect(isDangerousTreeDCommand('pause')).toBe(false)

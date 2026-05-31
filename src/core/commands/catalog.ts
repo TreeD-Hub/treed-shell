@@ -212,6 +212,27 @@ export const TREE_D_COMMAND_CATALOG: Record<PrinterCommandId, TreeDCommandCatalo
     capability: 'power',
     requiresConfirmation: true,
   },
+  restartKlipper: {
+    id: 'restartKlipper',
+    risk: 'danger',
+    label: 'Restart Klipper',
+    capability: 'serviceCommands',
+    requiresConfirmation: true,
+  },
+  firmwareRestart: {
+    id: 'firmwareRestart',
+    risk: 'danger',
+    label: 'Firmware restart',
+    capability: 'serviceCommands',
+    requiresConfirmation: true,
+  },
+  restartMoonraker: {
+    id: 'restartMoonraker',
+    risk: 'danger',
+    label: 'Restart Moonraker',
+    capability: 'serviceCommands',
+    requiresConfirmation: true,
+  },
   shutdownHost: {
     id: 'shutdownHost',
     risk: 'danger',

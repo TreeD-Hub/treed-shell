@@ -21,6 +21,9 @@ export type PrinterCommandId =
   | 'xyMotionTest'
   | 'consoleGcode'
   | 'rebootHost'
+  | 'restartKlipper'
+  | 'firmwareRestart'
+  | 'restartMoonraker'
   | 'shutdownHost'
 
 export type AxisId = 'X' | 'Y' | 'Z'
@@ -45,6 +48,9 @@ export type ExecuteCommandArgs =
         | 'shaperCalibrateFull'
         | 'xyMotionTest'
         | 'rebootHost'
+        | 'restartKlipper'
+        | 'firmwareRestart'
+        | 'restartMoonraker'
         | 'shutdownHost'
     }
   | {

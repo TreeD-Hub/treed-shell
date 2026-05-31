@@ -7,6 +7,8 @@ import {
   type PrinterCommandId,
 } from './core/commands'
 import { usePrinterSnapshot } from './core/store/usePrinterSnapshot'
+import { DashboardPage, type DashboardIdleWidgetId, type DashboardTuneGroupId } from './dashboard/DashboardPage'
+import { DashboardStatusDock } from './dashboard/DashboardStatusDock'
 import {
   BABYSTEP_STEP_OPTIONS,
   BOTTOM_NAV_ITEMS,
@@ -18,18 +20,18 @@ import {
   TOP_STATUS_BUTTONS,
   type TopStatusButtonId,
 } from './dashboard/config'
+import { resolvePrinterDisplayStatus } from './dashboard/printerStatusState'
+import { createTemperatureRuntimeState } from './dashboard/printerTemperatureState'
 import {
   clampPercent,
   rounded,
   statusLabel,
 } from './dashboard/helpers'
 import {
-  ActionSquareButton,
   AxisCrossControls,
   HorizontalSteppedSlider,
   IconMask,
   NavItemButton,
-  PlainMetric,
   PrintFileCard,
   PrintPreviewIcon,
   SegmentedToggle,
@@ -40,8 +42,6 @@ import {
   SettingsVirtualKeyboard,
   type SettingsMenuOption,
   type VirtualKeyboardLanguage,
-  StatusIconButton,
-  TemperatureMetric,
   TemperatureTrendChart,
   TuneCompactStepperInput,
   TuneModeToggle,
@@ -77,24 +77,13 @@ type MovementMode = 'buttons' | 'joystick'
 type MoveStepKey = '1' | '10' | '25' | '100'
 type ControlGroupId = 'movement' | 'heating' | 'fans' | 'lighting' | 'maintenance'
 type MacrosGroupId = 'bedMesh'
-type IdleWidgetId = 'temperature' | 'maintenance'
+type IdleWidgetId = DashboardIdleWidgetId
 type BedCalibrationStage = 'launch' | 'manual' | 'zOffset'
 type ActivePrintUiState = 'printing' | 'paused'
 type TemperatureKeyboardTarget = 'nozzle' | 'bed'
 type MaintenanceIconName = 'runtime' | 'due' | 'interval' | 'wrench'
 type PrintTuneNumericKeyboardTarget = 'volumetricFlow' | 'flow' | 'speed' | 'accel' | 'kFactor' | 'retract' | 'layers'
-type PrintTuneGroupId =
-  | 'nozzle'
-  | 'bed'
-  | 'volumetricFlow'
-  | 'fan'
-  | 'flow'
-  | 'speed'
-  | 'accel'
-  | 'kFactor'
-  | 'retract'
-  | 'progress'
-  | 'layers'
+type PrintTuneGroupId = DashboardTuneGroupId
 type TemperatureChartMode = 'nozzle' | 'bed' | 'both'
 type KeyboardTarget = 'idleNotes' | 'wifiSearch' | 'wifiPassword' | 'consoleCommand'
 type SettingsGroupId =
@@ -141,8 +130,42 @@ const TOP_BAR_POPUP_TITLES: Record<TopStatusButtonId, string> = {
   wifi: 'Состояние Wi-Fi',
   cloud: 'Состояние облака',
   notifications: 'Уведомления',
-  power: 'Выключение принтера',
+  power: 'Питание и перезапуск',
 }
+const POWER_MENU_ACTIONS: Array<{
+  command: Extract<PrinterCommandId, 'shutdownHost' | 'rebootHost' | 'restartKlipper' | 'firmwareRestart' | 'restartMoonraker'>
+  label: string
+  details: string
+  tone?: 'default' | 'danger'
+}> = [
+  {
+    command: 'restartKlipper',
+    label: 'Restart Klipper',
+    details: 'Перезапустить Klipper без перезагрузки host.',
+  },
+  {
+    command: 'firmwareRestart',
+    label: 'Firmware restart',
+    details: 'Перезапустить прошивки MCU через Klipper.',
+  },
+  {
+    command: 'restartMoonraker',
+    label: 'Restart Moonraker',
+    details: 'Перезапустить Moonraker API.',
+  },
+  {
+    command: 'rebootHost',
+    label: 'Перезагрузить host',
+    details: 'Полная перезагрузка Linux-хоста принтера.',
+    tone: 'danger',
+  },
+  {
+    command: 'shutdownHost',
+    label: 'Выключить host',
+    details: 'Остановить host. Для включения может потребоваться физический доступ.',
+    tone: 'danger',
+  },
+]
 type TopPopupPosition = {
   top: number
   left: number
@@ -329,14 +352,6 @@ const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
   degraded: 'Ограничено',
   reconnecting: 'Переподключение',
   offline: 'Офлайн',
-  shutdown: 'Klipper остановлен',
-}
-const IDLE_CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
-  connecting: 'Подключение к принтеру',
-  online: 'Ожидание печати',
-  degraded: 'Ограниченный режим',
-  reconnecting: 'Восстановление связи',
-  offline: 'Нет связи',
   shutdown: 'Klipper остановлен',
 }
 const SETTINGS_VIRTUAL_KEYBOARD_ROWS: string[][] = [
@@ -568,8 +583,9 @@ function App() {
   })
   const [babystepStep, setBabystepStep] = useState<number>(BABYSTEP_STEP_OPTIONS[1])
   const [activeTopPopup, setActiveTopPopup] = useState<TopStatusButtonId | null>(null)
+  const [lastReadPrinterNotificationId, setLastReadPrinterNotificationId] = useState<string | null>(null)
   const [powerPopupNotice, setPowerPopupNotice] = useState<string>('')
-  const [isPowerShutdownArmed, setIsPowerShutdownArmed] = useState<boolean>(false)
+  const [armedPowerCommand, setArmedPowerCommand] = useState<PrinterCommandId | null>(null)
   const [topPopupPosition, setTopPopupPosition] = useState<TopPopupPosition | null>(null)
   const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
   const [filesSortKey, setFilesSortKey] = useState<FilesSortKey>('name')
@@ -769,8 +785,10 @@ function App() {
   const isNetworkCapabilityAvailable = snapshot.capabilities.network
   const isCloudCapabilityAvailable = snapshot.capabilities.cloud
   const isUpdatesCapabilityAvailable = snapshot.capabilities.updates
-  const isPowerCapabilityAvailable = snapshot.capabilities.power
-  const powerShutdownBlockReason = getCommandBlockReason('shutdownHost')
+  const powerMenuActions = POWER_MENU_ACTIONS.map((action) => ({
+    ...action,
+    blockReason: getCommandBlockReason(action.command),
+  }))
   const networkCapabilityNotice = isNetworkCapabilityAvailable
     ? 'Выберите сеть и выполните подключение.'
     : 'Недоступно: Moonraker/V2 Wi-Fi capability не подтвержден.'
@@ -781,9 +799,24 @@ function App() {
   const updateCapabilityNotice = isUpdatesCapabilityAvailable
     ? updateNotice
     : 'Недоступно: Moonraker/V2 update capability не подтвержден.'
-  const powerCapabilityNotice = isPowerCapabilityAvailable
-    ? (powerShutdownBlockReason ?? powerPopupNotice)
-    : 'Недоступно: Moonraker machine power capability не подтвержден.'
+  const temperatureRuntimeState = useMemo(
+    () => createTemperatureRuntimeState(
+      snapshot,
+      TEMPERATURE_METRIC_DEFINITIONS,
+      {
+        nozzle: printNozzleTargetTemp,
+        bed: printBedTargetTemp,
+      },
+    ),
+    [
+      printBedTargetTemp,
+      printNozzleTargetTemp,
+      snapshot.bedTemp,
+      snapshot.extruderTemp,
+      snapshot.modelFanPercent,
+    ],
+  )
+  const temperatureMetrics = temperatureRuntimeState.metrics
   const eddyStatusLabel = snapshot.v2.eddy.status === 'ready'
     ? 'Eddy готов к Z-home/mesh'
     : snapshot.v2.eddy.status === 'uncalibrated'
@@ -791,19 +824,34 @@ function App() {
     : snapshot.v2.eddy.status === 'requires_xy_home'
       ? 'Eddy требует homing XY'
       : 'Eddy статус неизвестен'
-  const idleNozzleTempValue = rounded(snapshot.extruderTemp)
-  const idleBedTempValue = rounded(snapshot.bedTemp)
+  const idleNozzleTempValue = temperatureRuntimeState.nozzleCurrent
+  const idleBedTempValue = temperatureRuntimeState.bedCurrent
   const effectiveActivePrintState = snapshot.source === 'live'
     ? snapshot.printJob.state
     : hasActivePrint
       ? (activePrintUiState ?? snapshot.state)
       : snapshot.state
   const isPrintPaused = hasActivePrint && statusLabel(effectiveActivePrintState) === 'Пауза'
+  const printerDisplayStatus = useMemo(
+    () => resolvePrinterDisplayStatus(snapshot),
+    [
+      snapshot.connection,
+      snapshot.message,
+      snapshot.printJob.message,
+      snapshot.printJob.state,
+      snapshot.state,
+    ],
+  )
+  const currentPrinterNotification = printerDisplayStatus.notification
+  const currentPrinterNotificationId = currentPrinterNotification?.id ?? null
+  const hasUnreadPrinterNotification =
+    currentPrinterNotificationId !== null &&
+    currentPrinterNotificationId !== lastReadPrinterNotificationId
   const printPauseCommand = isPrintPaused ? 'resume' : 'pause'
   const printPauseBlockReason = getCommandBlockReason(printPauseCommand)
   const printCancelBlockReason = getCommandBlockReason('cancel')
   const printStartBlockReason = getCommandBlockReason('start')
-  const idleHeroStatusLabel = IDLE_CONNECTION_LABELS[snapshot.connection]
+  const idleHeroStatusLabel = printerDisplayStatus.label
   const effectiveFilesLibrary = snapshot.source === 'live' ? snapshot.printFiles : filesLibrary
   const sortedPrintFiles = useMemo(() => {
     const nextItems = [...effectiveFilesLibrary]
@@ -915,27 +963,6 @@ function App() {
       }
     }
   }, [])
-
-  const temperatureValueByKey = {
-    nozzle: snapshot.extruderTemp,
-    bed: snapshot.bedTemp,
-  } as const
-  const temperatureTargetByKey = {
-    nozzle: printNozzleTargetTemp,
-    bed: printBedTargetTemp,
-  } as const
-
-  const temperatureMetrics = TEMPERATURE_METRIC_DEFINITIONS.map((definition) => {
-    const currentValue = temperatureValueByKey[definition.key]
-    const targetValue = temperatureTargetByKey[definition.key]
-
-    return {
-      ...definition,
-      target: targetValue,
-      current: rounded(currentValue),
-      fillPercent: clampPercent(currentValue, targetValue),
-    }
-  })
 
   const quickMetricValueByKey = {
     volumetricFlow: printVolumetricFlowMm3S,
@@ -1069,12 +1096,16 @@ function App() {
         return
       }
       setPowerPopupNotice('')
-      setIsPowerShutdownArmed(false)
+      setArmedPowerCommand(null)
       setTopPopupPosition(resolveTopPopupPosition(id))
       setActiveTopPopup(id)
     },
     [activeTopPopup, closeTopPopup, resolveTopPopupPosition],
   )
+
+  const setTopButtonRef = useCallback((id: TopStatusButtonId, node: HTMLButtonElement | null): void => {
+    topButtonRefs.current[id] = node
+  }, [])
 
   const openWifiSettings = useCallback(() => {
     setActiveSettingsGroup('network')
@@ -1851,6 +1882,18 @@ function App() {
   }, [activeScreen, activeTopPopup, closeTopPopup])
 
   useEffect(() => {
+    if (activeTopPopup === 'notifications' && currentPrinterNotificationId !== null) {
+      setLastReadPrinterNotificationId(currentPrinterNotificationId)
+    }
+  }, [activeTopPopup, currentPrinterNotificationId])
+
+  useEffect(() => {
+    if (currentPrinterNotificationId === null && lastReadPrinterNotificationId !== null) {
+      setLastReadPrinterNotificationId(null)
+    }
+  }, [currentPrinterNotificationId, lastReadPrinterNotificationId])
+
+  useEffect(() => {
     if (activeTopPopup === null || typeof window === 'undefined') {
       return
     }
@@ -2018,32 +2061,27 @@ function App() {
     }
   }, [joystickVector.x, joystickVector.y, movementMode])
 
-  function setTopButtonRef(id: TopStatusButtonId, node: HTMLButtonElement | null): void {
-    topButtonRefs.current[id] = node
-  }
+  async function handlePowerMenuAction(command: (typeof POWER_MENU_ACTIONS)[number]['command']): Promise<void> {
+    const action = POWER_MENU_ACTIONS.find((item) => item.command === command)
+    const blockReason = getCommandBlockReason(command)
 
-  async function handlePowerShutdownAction(): Promise<void> {
-    if (!isPowerCapabilityAvailable) {
-      setPowerPopupNotice(powerCapabilityNotice)
+    if (blockReason !== null) {
+      setPowerPopupNotice(blockReason)
+      setArmedPowerCommand(null)
       return
     }
 
-    if (powerShutdownBlockReason !== null) {
-      setPowerPopupNotice(powerShutdownBlockReason)
+    if (requiresCommandConfirmation(command) && armedPowerCommand !== command) {
+      setArmedPowerCommand(command)
+      setPowerPopupNotice(`Подтвердите действие повторным нажатием: ${action?.label ?? command}.`)
       return
     }
 
-    if (requiresCommandConfirmation('shutdownHost') && !isPowerShutdownArmed) {
-      setIsPowerShutdownArmed(true)
-      setPowerPopupNotice('Подтвердите выключение повторным нажатием.')
-      return
-    }
-
-    const ok = await executeCommand({ command: 'shutdownHost' })
-    setIsPowerShutdownArmed(false)
+    const ok = await executeCommand({ command })
+    setArmedPowerCommand(null)
     if (ok) {
-      setPowerPopupNotice('Команда выключения отправлена.')
-      await refresh()
+      setPowerPopupNotice(`Команда отправлена: ${action?.label ?? command}.`)
+      void refresh()
     }
   }
 
@@ -2872,25 +2910,12 @@ function App() {
   }, [])
 
   const dashboardStatusDock = (
-    <div className="dashboard-status-dock">
-      <span className="dashboard-status-logo">TreeD</span>
-      <div className="dashboard-status-actions top-icons" aria-label="иконки статуса главной">
-        {TOP_STATUS_BUTTONS.map((item) => (
-          <StatusIconButton
-            key={item.id}
-            icon={item.icon}
-            label={item.label}
-            tone={item.tone}
-            showNotificationDot={item.showNotificationDot}
-            className={activeTopPopup === item.id ? 'is-active' : undefined}
-            aria-haspopup="dialog"
-            aria-expanded={activeTopPopup === item.id}
-            onClick={() => openTopPopup(item.id)}
-            ref={(node) => setTopButtonRef(item.id, node)}
-          />
-        ))}
-      </div>
-    </div>
+    <DashboardStatusDock
+      activeTopPopup={activeTopPopup}
+      hasUnreadPrinterNotification={hasUnreadPrinterNotification}
+      onOpenTopPopup={openTopPopup}
+      onButtonRef={setTopButtonRef}
+    />
   )
 
   return (
@@ -2898,363 +2923,52 @@ function App() {
       <section className="screen-shell" data-testid="screen-shell" ref={screenShellRef}>
         <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''} ${activeScreen === 'control' ? 'is-control-active' : ''}`}>
           {activeScreen === 'dashboard' ? (
-            hasActivePrint ? (
-              <>
-              <section className="job-card">
-                {dashboardStatusDock}
-                <div className="preview-panel">
-                  <div className="preview-inner">
-                    <PrintPreviewIcon />
-                  </div>
-                </div>
-
-                <div className="job-info">
-                  <p className="job-name">{displayPrintFileName ?? DASHBOARD_VALUES.fileName}</p>
-
-                  <button
-                    type="button"
-                    className="print-tune-hitbox print-tune-hitbox-progress"
-                    onClick={() => handlePrintTuneGroupOpen('progress')}
-                    aria-label="Открыть параметры прогресса печати"
-                    data-testid="print-tune-group-progress"
-                  >
-                    <div className="job-metrics">
-                      <div>
-                        <p className="label">Прогресс</p>
-                        <p className="job-main-value">{printFill}%</p>
-                      </div>
-                      <div className="job-metrics-right">
-                        <p className="label">Конец</p>
-                        <p className="job-main-value">{adjustedEtaTime}</p>
-                      </div>
-                    </div>
-
-                    <div className="job-meter">
-                      <div className="job-meter-fill" style={{ width: `${printFill}%` }} />
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="print-tune-hitbox print-tune-hitbox-layer"
-                    onClick={() => handlePrintTuneGroupOpen('layers')}
-                    aria-label="Открыть параметры слоя"
-                    data-testid="print-tune-group-layers"
-                  >
-                    <div className="job-layer-row">
-                      <span className="label">Слой</span>
-                      <strong>
-                        {displayLayerCurrent} / {displayLayerTotal}
-                      </strong>
-                    </div>
-                  </button>
-                </div>
-              </section>
-
-              <section className="right-column">
-                <div className="stats-actions-row">
-                  <article className="stats-card">
-                    <div className="temp-grid">
-                      {temperatureMetrics.map((metric) => (
-                        <button
-                          key={metric.label}
-                          type="button"
-                          className="print-tune-hitbox print-tune-hitbox-metric"
-                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
-                          aria-label={`Открыть параметры: ${metric.label}`}
-                          data-testid={`print-tune-group-${metric.key}`}
-                        >
-                          <TemperatureMetric
-                            label={metric.label}
-                            current={metric.current}
-                            target={metric.target}
-                            meterTone={metric.meterTone}
-                            fillPercent={metric.fillPercent}
-                          />
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="three-up-grid">
-                      {quickMetrics.map((metric) => (
-                        <button
-                          key={metric.label}
-                          type="button"
-                          className="print-tune-hitbox print-tune-hitbox-metric"
-                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
-                          aria-label={`Открыть параметры: ${metric.label}`}
-                          data-testid={`print-tune-group-${metric.key}`}
-                        >
-                          <PlainMetric
-                            label={metric.label}
-                            value={metric.value}
-                            unit={metric.unit}
-                            valueClassName={metric.valueClassName}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-
-                  <div className="action-stack" role="group" aria-label="действия печати">
-                    <ActionSquareButton
-                      icon={isPrintPaused || pendingCommand === 'resume' ? 'actionResume' : 'actionPause'}
-                      label={
-                        pendingCommand === 'pause'
-                          ? 'Пауза...'
-                          : pendingCommand === 'resume'
-                            ? 'Продолжение...'
-                            : isPrintPaused
-                              ? 'Продолжить'
-                              : 'Пауза'
-                      }
-                      onClick={() => void handlePause()}
-                      disabled={isBusy || printPauseBlockReason !== null}
-                    />
-                    <ActionSquareButton
-                      icon="actionStopCritical"
-                      tone="danger"
-                      label={pendingCommand === 'cancel' ? 'Стоп...' : 'Стоп'}
-                      onClick={handleStopRequest}
-                      disabled={isBusy || printCancelBlockReason !== null}
-                    />
-                  </div>
-                </div>
-
-                <div className="process-row">
-                  <article className="process-card">
-                    <div className="process-grid">
-                      {processMetrics.map((metric) => (
-                        <button
-                          key={metric.label}
-                          type="button"
-                          className="print-tune-hitbox print-tune-hitbox-metric"
-                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
-                          aria-label={`Открыть параметры: ${metric.label}`}
-                          data-testid={`print-tune-group-${metric.key}`}
-                        >
-                          <PlainMetric
-                            label={metric.label}
-                            value={metric.value}
-                            unit={metric.unit}
-                            valueClassName="process-value"
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-
-                  <aside className="zoffset-card">
-                    <div className="zoffset-head">
-                      <p className="label">Z-offset</p>
-                      <p className="value zoffset-value">
-                        {DASHBOARD_VALUES.zOffsetMm.toFixed(2)}<span>мм</span>
-                      </p>
-                    </div>
-                    <div
-                      className="step-selector"
-                      role="group"
-                      aria-label="шаг babystep"
-                      style={{ '--step-active-index': String(babystepActiveIndex) } as CSSProperties}
-                    >
-                      <span className="step-selector-indicator" aria-hidden="true" />
-                      {BABYSTEP_STEP_OPTIONS.map((step) => (
-                        <button
-                          key={step}
-                          type="button"
-                          className={`step-btn ${babystepStep === step ? 'is-active' : ''}`}
-                          onClick={() => setBabystepStep(step)}
-                          aria-pressed={babystepStep === step}
-                        >
-                          {step}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="babystep-controls" role="group" aria-label="управление babystep">
-                      <button
-                        type="button"
-                        className="babystep-btn"
-                        aria-label={`Babystep минус ${babystepStep}`}
-                      >
-                        -
-                      </button>
-                      <button
-                        type="button"
-                        className="babystep-btn"
-                        aria-label={`Babystep плюс ${babystepStep}`}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </aside>
-                </div>
-              </section>
-              </>
-            ) : (
-              <section className="dashboard-idle-screen" data-testid="screen-dashboard-idle">
-                <div className="dashboard-idle-hero">
-                  <div className="dashboard-idle-logo" aria-hidden="true">
-                    <img className="dashboard-idle-logo-image" src={treeDLogoAsset} alt="" />
-                  </div>
-                  <p className="dashboard-idle-title">{idleHeroStatusLabel}</p>
-                  {dashboardStatusDock}
-                </div>
-
-                <aside className="dashboard-idle-sidebar">
-                  {idleWidgetOrder.map((widgetId) => {
-                    const isTemperatureWidget = widgetId === 'temperature'
-                    const isArmed = armedIdleWidgetId === widgetId
-                    const isDragging = draggingIdleWidgetId === widgetId
-
-                    return (
-                      <article
-                        key={widgetId}
-                        ref={(node) => {
-                          idleWidgetRefs.current[widgetId] = node
-                        }}
-                        className={[
-                          'idle-mini-widget',
-                          isTemperatureWidget ? 'idle-mini-widget-temps' : 'idle-mini-widget-service',
-                          isArmed ? 'is-arming' : '',
-                          isDragging ? 'is-dragging' : '',
-                        ].filter(Boolean).join(' ')}
-                      >
-                        <button
-                          type="button"
-                          className="idle-mini-widget-nav"
-                          data-testid={`idle-widget-${widgetId}`}
-                          aria-label={isTemperatureWidget ? 'Открыть управление нагревом' : 'Открыть раздел Т.О'}
-                          onClick={() => openIdleWidgetTarget(widgetId)}
-                        >
-                          {isTemperatureWidget ? (
-                            <>
-                              <p className="idle-mini-label">Температура</p>
-                              <div className="idle-temp-grid">
-                                <p>
-                                  <span className="idle-temp-kind" aria-hidden="true">
-                                    <IconMask name="metricNozzle" size={20} className="idle-temp-kind-icon" />
-                                  </span>
-                                  <span className="idle-temp-name">Сопло</span>
-                                  <strong>
-                                    <span className="idle-temp-value-number">{idleNozzleTempValue}</span>
-                                    <span className="idle-temp-value-unit">°C</span>
-                                  </strong>
-                                </p>
-                                <p>
-                                  <span className="idle-temp-kind" aria-hidden="true">
-                                    <IconMask name="metricBed" size={20} className="idle-temp-kind-icon" />
-                                  </span>
-                                  <span className="idle-temp-name">Стол</span>
-                                  <strong>
-                                    <span className="idle-temp-value-number">{idleBedTempValue}</span>
-                                    <span className="idle-temp-value-unit">°C</span>
-                                  </strong>
-                                </p>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <p className="idle-mini-label">Т.О</p>
-                              <div className="idle-service-metrics">
-                                <p><span>Пробег</span><strong>{MAINTENANCE_STATUS.runtimeHours} ч</strong></p>
-                                <p><span>До Т.О</span><strong>{MAINTENANCE_STATUS.hoursLeft} ч</strong></p>
-                              </div>
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="idle-widget-drag-handle"
-                          data-testid={`idle-widget-${widgetId}-drag-handle`}
-                          aria-label={isTemperatureWidget ? 'Переместить виджет температуры' : 'Переместить виджет Т.О'}
-                          onPointerDown={(event) => handleIdleWidgetDragPointerDown(event, widgetId)}
-                          onPointerMove={(event) => handleIdleWidgetDragPointerMove(event, widgetId)}
-                          onPointerUp={handleIdleWidgetDragPointerEnd}
-                          onPointerCancel={handleIdleWidgetDragPointerEnd}
-                          onClick={handleIdleWidgetDragHandleClick}
-                        >
-                          <span className="idle-widget-drag-handle-mark" aria-hidden="true" />
-                        </button>
-                      </article>
-                    )
-                  })}
-
-                  <article className="dashboard-idle-notes" aria-label="Заметки">
-                    <h3>Заметки</h3>
-                    <textarea
-                      ref={idleNotesInputRef}
-                      className="dashboard-idle-notes-input"
-                      value={idleNotesText}
-                      onFocus={handleIdleNotesKeyboardOpen}
-                      onChange={handleIdleNotesChange}
-                      spellCheck={false}
-                      data-testid="idle-notes-input"
-                    />
-                  </article>
-                </aside>
-
-                {isIdleNotesKeyboardOpen ? (
-                  <div className="idle-notes-keyboard" data-testid="idle-notes-keyboard">
-                    {IDLE_NOTES_KEYBOARD_ROWS.map((row, rowIndex) => (
-                      <div className="idle-notes-keyboard-row" key={`idle-notes-keyboard-row-${rowIndex}`}>
-                        {row.map((label) => (
-                          <button
-                            key={label}
-                            type="button"
-                            className="idle-notes-keyboard-key"
-                            aria-label={`Символ ${label}`}
-                            onMouseDown={handleIdleNotesKeyMouseDown}
-                            onClick={() => handleIdleNotesVirtualKey(label.toLocaleLowerCase('ru-RU'))}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-
-                    <div className="idle-notes-keyboard-row idle-notes-keyboard-row-actions">
-                      <button
-                        type="button"
-                        className="idle-notes-keyboard-key idle-notes-keyboard-key-action"
-                        aria-label="Удалить символ"
-                        onMouseDown={handleIdleNotesKeyMouseDown}
-                        onClick={() => handleIdleNotesVirtualKey('backspace')}
-                      >
-                        ⌫
-                      </button>
-                      <button
-                        type="button"
-                        className="idle-notes-keyboard-key idle-notes-keyboard-key-space"
-                        aria-label="Пробел"
-                        onMouseDown={handleIdleNotesKeyMouseDown}
-                        onClick={() => handleIdleNotesVirtualKey('space')}
-                      >
-                        Пробел
-                      </button>
-                      <button
-                        type="button"
-                        className="idle-notes-keyboard-key idle-notes-keyboard-key-action"
-                        aria-label="Новая строка"
-                        onMouseDown={handleIdleNotesKeyMouseDown}
-                        onClick={() => handleIdleNotesVirtualKey('enter')}
-                      >
-                        ↵
-                      </button>
-                      <button
-                        type="button"
-                        className="idle-notes-keyboard-key idle-notes-keyboard-key-close"
-                        aria-label="Скрыть клавиатуру"
-                        onMouseDown={handleIdleNotesKeyMouseDown}
-                        onClick={handleIdleNotesKeyboardClose}
-                      >
-                        Скрыть
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </section>
-            )
+            <DashboardPage
+              statusDock={dashboardStatusDock}
+              logoSrc={treeDLogoAsset}
+              hasActivePrint={hasActivePrint}
+              displayPrintFileName={displayPrintFileName}
+              printFill={printFill}
+              adjustedEtaTime={adjustedEtaTime}
+              displayLayerCurrent={displayLayerCurrent}
+              displayLayerTotal={displayLayerTotal}
+              temperatureMetrics={temperatureMetrics}
+              quickMetrics={quickMetrics}
+              processMetrics={processMetrics}
+              isPrintPaused={isPrintPaused}
+              pendingCommand={pendingCommand}
+              isBusy={isBusy}
+              printPauseBlockReason={printPauseBlockReason}
+              printCancelBlockReason={printCancelBlockReason}
+              babystepStep={babystepStep}
+              babystepActiveIndex={babystepActiveIndex}
+              idleHeroStatusLabel={idleHeroStatusLabel}
+              idleWidgetOrder={idleWidgetOrder}
+              armedIdleWidgetId={armedIdleWidgetId}
+              draggingIdleWidgetId={draggingIdleWidgetId}
+              idleWidgetRefs={idleWidgetRefs}
+              idleNozzleTempValue={idleNozzleTempValue}
+              idleBedTempValue={idleBedTempValue}
+              maintenanceSummary={MAINTENANCE_STATUS}
+              idleNotesInputRef={idleNotesInputRef}
+              idleNotesText={idleNotesText}
+              isIdleNotesKeyboardOpen={isIdleNotesKeyboardOpen}
+              idleNotesKeyboardRows={IDLE_NOTES_KEYBOARD_ROWS}
+              onPrintTuneGroupOpen={handlePrintTuneGroupOpen}
+              onPause={() => void handlePause()}
+              onStopRequest={handleStopRequest}
+              onBabystepStepChange={setBabystepStep}
+              onIdleWidgetTargetOpen={openIdleWidgetTarget}
+              onIdleWidgetDragPointerDown={handleIdleWidgetDragPointerDown}
+              onIdleWidgetDragPointerMove={handleIdleWidgetDragPointerMove}
+              onIdleWidgetDragPointerEnd={handleIdleWidgetDragPointerEnd}
+              onIdleWidgetDragHandleClick={handleIdleWidgetDragHandleClick}
+              onIdleNotesKeyboardOpen={handleIdleNotesKeyboardOpen}
+              onIdleNotesChange={handleIdleNotesChange}
+              onIdleNotesKeyMouseDown={handleIdleNotesKeyMouseDown}
+              onIdleNotesVirtualKey={handleIdleNotesVirtualKey}
+              onIdleNotesKeyboardClose={handleIdleNotesKeyboardClose}
+            />
           ) : isFilesScreenActive ? (
             <section className="files-screen" data-testid="screen-files">
               <div className="files-scroll-area" data-testid="files-scroll-area">
@@ -5076,10 +4790,16 @@ function App() {
 
               {activeTopPopup === 'notifications' ? (
                 <div className="top-popup-content">
-                  <p className="top-popup-note">Последнее сообщение от принтера:</p>
+                  <p className="top-popup-note">Уведомления принтера:</p>
                   <ul className="top-popup-list">
                     {commandError ? <li>{commandError}</li> : null}
-                    <li>{snapshot.message}</li>
+                    {currentPrinterNotification !== null ? (
+                      <li>
+                        <strong>{currentPrinterNotification.title}</strong>
+                        {currentPrinterNotification.details ? `: ${currentPrinterNotification.details}` : ''}
+                      </li>
+                    ) : null}
+                    {commandError || currentPrinterNotification !== null ? null : <li>Новых уведомлений нет.</li>}
                   </ul>
                   <p className="top-popup-secondary">Новые системные уведомления будут добавляться в этот список.</p>
                 </div>
@@ -5088,19 +4808,22 @@ function App() {
               {activeTopPopup === 'power' ? (
                 <div className="top-popup-content">
                   <p className="top-popup-warning">
-                    {powerShutdownBlockReason === null
-                      ? 'Выключение принтера остановит текущую задачу и потребует ручного запуска питания.'
-                      : powerCapabilityNotice}
+                    Перезапуск сервисов может прервать печать. Host-действия используйте только когда нужен полный restart устройства.
                   </p>
-                  <div className="top-popup-actions">
-                    <button
-                      type="button"
-                      className="top-popup-action top-popup-action-danger"
-                      onClick={() => void handlePowerShutdownAction()}
-                      disabled={powerShutdownBlockReason !== null || isBusy}
-                    >
-                      {isPowerShutdownArmed ? 'Подтвердить выключение' : 'Выключить принтер'}
-                    </button>
+                  <div className="top-popup-actions top-popup-power-actions">
+                    {powerMenuActions.map((action) => (
+                      <button
+                        key={action.command}
+                        type="button"
+                        className={`top-popup-action ${action.tone === 'danger' ? 'top-popup-action-danger' : ''}`}
+                        onClick={() => void handlePowerMenuAction(action.command)}
+                        disabled={isBusy}
+                        aria-disabled={action.blockReason !== null || isBusy}
+                        title={action.blockReason ?? action.details}
+                      >
+                        {armedPowerCommand === action.command ? `Подтвердить: ${action.label}` : action.label}
+                      </button>
+                    ))}
                     <button type="button" className="top-popup-action" onClick={closeTopPopup}>
                       Отмена
                     </button>

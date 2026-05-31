@@ -8,7 +8,7 @@ const LIVE_HTTP_FALLBACK_INTERVAL_MS = 30_000
 
 const FALLBACK_SNAPSHOT: PrinterSnapshot = {
   source: dataMode,
-  connection: 'offline',
+  connection: 'connecting',
   wifiSsid: 'Не подключено',
   ipAddress: '—',
   state: 'unknown',
@@ -20,7 +20,7 @@ const FALLBACK_SNAPSHOT: PrinterSnapshot = {
   bedTemp: 0,
   modelFanPercent: 0,
   updatedAt: new Date(0).toISOString(),
-  message: 'Ожидание данных...',
+  message: 'Запуск системы...',
   hardware: {
     marker: 'treed-v2',
     profile: 'treed_v2_corexy_v1',

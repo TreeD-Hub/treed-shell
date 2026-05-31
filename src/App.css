@@ -299,6 +299,11 @@ body {
   gap: var(--space-xs);
 }
 
+.top-popup-power-actions {
+  align-items: stretch;
+  flex-direction: column;
+}
+
 .top-popup-action {
   height: 42px;
   border-radius: 10px;
@@ -309,6 +314,10 @@ body {
   font-weight: var(--font-weight-medium);
   padding: 0 var(--space-sm);
   cursor: pointer;
+}
+
+.top-popup-action[aria-disabled='true'] {
+  opacity: 0.58;
 }
 
 .top-popup-action-danger {
