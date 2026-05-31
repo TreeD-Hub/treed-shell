@@ -779,7 +779,6 @@ function App() {
     [joystickVector.x, joystickVector.y],
   )
   const axisCoordinatesLabel = `X ${formatAxisCoordinate(printHeadPosition.x)}  Y ${formatAxisCoordinate(printHeadPosition.y)}  Z ${formatAxisCoordinate(printHeadPosition.z)}  E ${formatAxisCoordinate(printHeadPosition.e)}`
-  const printOffsetLabel = `Raw machine coords · print_offset_y ${formatAxisCoordinate(snapshot.toolhead.printOffsetY)} мм`
   const axisCoordinateItems = [
     { axis: 'X', value: formatAxisCoordinate(printHeadPosition.x) },
     { axis: 'Y', value: formatAxisCoordinate(printHeadPosition.y) },
@@ -3322,9 +3321,6 @@ function App() {
                                       <span className="axis-coordinate-value">{item.value}</span>
                                     </span>
                                   ))}
-                                </p>
-                                <p className="axis-coordinate-mode" data-testid="axis-coordinate-mode">
-                                  {printOffsetLabel}
                                 </p>
                                 <div className="axis-home-status" aria-label="Статус хоуминга осей">
                                   {axisHomeStatuses.map((item) => (
