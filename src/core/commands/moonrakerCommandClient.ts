@@ -133,7 +133,7 @@ function commandSuccessMessage(args: ExecuteCommandArgs): string {
 }
 
 function formatFilamentScript(command: 'LOAD_FILAMENT' | 'UNLOAD_FILAMENT', args: Extract<ExecuteCommandArgs, { command: 'loadFilament' | 'unloadFilament' }>): string {
-  const parts = [command]
+  const parts: string[] = [command]
 
   if (typeof args.lengthMm === 'number' && Number.isFinite(args.lengthMm)) {
     parts.push(`LENGTH=${args.lengthMm}`)

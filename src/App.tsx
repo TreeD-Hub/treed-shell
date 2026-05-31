@@ -1907,7 +1907,7 @@ function App() {
       return
     }
 
-    setPrintHeadPosition((prevPosition) => normalizeHeadPosition({
+    setPrintHeadPosition(normalizeHeadPosition({
       x: snapshot.toolhead.rawX,
       y: snapshot.toolhead.rawY,
       z: snapshot.toolhead.rawZ,
