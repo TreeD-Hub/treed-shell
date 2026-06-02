@@ -66,7 +66,13 @@ const IDLE_CONTEXT: TreeDCommandRuntimeContext = {
     isPaused: false,
   },
   homedAxes: 'xyz',
+  toolhead: {
+    rawX: 10,
+    rawY: 20,
+    rawZ: 5,
+  },
   eddyStatus: 'ready',
+  extruderTemp: 210,
 }
 
 const PRINTING_CONTEXT: TreeDCommandRuntimeContext = {
@@ -166,7 +172,23 @@ describe('TREE_D_COMMAND_CATALOG', () => {
       command: 'moveAxis',
       axis: 'Z',
       distanceMm: 1,
-    })).toContain('ось Z')
+    })).toContain('Home XYZ')
+    expect(getTreeDCommandBlockReason('moveAxis', {
+      ...IDLE_CONTEXT,
+      toolhead: {
+        rawX: 10,
+        rawY: Number.NaN,
+        rawZ: 5,
+      },
+    }, {
+      command: 'moveAxis',
+      axis: 'Y',
+      distanceMm: 1,
+    })).toContain('координаты XYZ')
+    expect(getTreeDCommandBlockReason('loadFilament', {
+      ...IDLE_CONTEXT,
+      extruderTemp: 169,
+    })).toContain('170')
     expect(getTreeDCommandBlockReason('moveAxis', PRINTING_CONTEXT, {
       command: 'moveAxis',
       axis: 'X',

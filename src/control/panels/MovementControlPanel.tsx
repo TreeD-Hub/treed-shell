@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { usePrinterStoreSelector } from '../../core/store/printerStore'
 import type { PrinterSnapshot } from '../../core/transport/types'
 import {
@@ -20,6 +20,7 @@ const HEAD_X_BOUNDS_MM = { min: 0, max: 250 } as const
 const HEAD_Y_BOUNDS_MM = { min: 0, max: 250 } as const
 const MAX_JOYSTICK_SPEED_MM_S = 50
 const HOMED_AXIS_IDS: readonly AxisId[] = ['X', 'Y', 'Z']
+const MIN_FILAMENT_EXTRUDE_TEMP_C = 170
 
 type MovementSnapshotInput = {
   rawX: number
@@ -27,6 +28,7 @@ type MovementSnapshotInput = {
   rawZ: number
   rawE: number
   homedAxes: string
+  extruderTemp: number
 }
 
 type AxisMotionPanelProps = Pick<
@@ -48,6 +50,7 @@ function selectMovementSnapshotInput(snapshot: PrinterSnapshot): MovementSnapsho
     rawZ: snapshot.toolhead.rawZ,
     rawE: snapshot.toolhead.rawE,
     homedAxes: snapshot.homedAxes,
+    extruderTemp: snapshot.extruderTemp,
   }
 }
 
@@ -57,7 +60,8 @@ function isMovementSnapshotInputEqual(left: MovementSnapshotInput, right: Moveme
     left.rawY === right.rawY &&
     left.rawZ === right.rawZ &&
     left.rawE === right.rawE &&
-    left.homedAxes === right.homedAxes
+    left.homedAxes === right.homedAxes &&
+    left.extruderTemp === right.extruderTemp
   )
 }
 
@@ -100,6 +104,10 @@ function buildAxisHomeStatuses(homedAxes: string): AxisHomeStatus[] {
   }))
 }
 
+function isAxisHomed(homedAxes: string, axis: AxisId): boolean {
+  return homedAxes.toLocaleLowerCase('en-US').includes(axis.toLocaleLowerCase('en-US'))
+}
+
 export const MovementControlPanel = memo(function MovementControlPanel({
   pendingCommand,
   isBusy,
@@ -124,7 +132,7 @@ export const MovementControlPanel = memo(function MovementControlPanel({
       <article className="control-card control-card-parking">
         <div className="control-card-head">
           <h3 className="control-card-title">Парковка</h3>
-          {pendingCommand === 'home' ? (
+          {pendingCommand === 'home' || pendingCommand === 'homeAll' || pendingCommand === 'homeXY' || pendingCommand === 'homeZ' ? (
             <p className="control-card-state">Парковка...</p>
           ) : null}
         </div>
@@ -202,6 +210,8 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
     isMovementSnapshotInputEqual,
   )
   const [joystickVector, setJoystickVector] = useState<JoystickVector>({ x: 0, y: 0 })
+  const lockPopupIdRef = useRef(0)
+  const [lockPopup, setLockPopup] = useState<{ id: number; message: string } | null>(null)
   const [printHeadPosition, setPrintHeadPosition] = useState<PrintHeadPosition>(() =>
     normalizeHeadPosition({
       x: movementSnapshot.rawX,
@@ -224,12 +234,38 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
     () => buildAxisHomeStatuses(movementSnapshot.homedAxes),
     [movementSnapshot.homedAxes],
   )
+  const isXyzParked = HOMED_AXIS_IDS.every((axis) => isAxisHomed(movementSnapshot.homedAxes, axis))
+  const hasKnownXyzCoordinates =
+    Number.isFinite(movementSnapshot.rawX) &&
+    Number.isFinite(movementSnapshot.rawY) &&
+    Number.isFinite(movementSnapshot.rawZ)
+  const isXyzMovementLocked = !isXyzParked || !hasKnownXyzCoordinates
+  const isFilamentMoveLocked =
+    !Number.isFinite(movementSnapshot.extruderTemp) ||
+    movementSnapshot.extruderTemp < MIN_FILAMENT_EXTRUDE_TEMP_C
+  const movementLockLabel = !isXyzParked
+    ? 'Сначала выполните парковку XYZ.'
+    : !hasKnownXyzCoordinates
+      ? 'Координаты XYZ неизвестны.'
+      : null
+  const filamentLockLabel = isFilamentMoveLocked
+    ? `Нагрейте сопло минимум до ${MIN_FILAMENT_EXTRUDE_TEMP_C}°C для подачи филамента.`
+    : null
 
   useEffect(() => {
-    if (movementMode !== 'joystick' && (joystickVector.x !== 0 || joystickVector.y !== 0)) {
+    if (lockPopup === null) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setLockPopup(null), 3000)
+    return () => window.clearTimeout(timeoutId)
+  }, [lockPopup])
+
+  useEffect(() => {
+    if ((movementMode !== 'joystick' || isXyzMovementLocked) && (joystickVector.x !== 0 || joystickVector.y !== 0)) {
       setJoystickVector({ x: 0, y: 0 })
     }
-  }, [joystickVector.x, joystickVector.y, movementMode])
+  }, [isXyzMovementLocked, joystickVector.x, joystickVector.y, movementMode])
 
   useEffect(() => {
     if (movementMode === 'joystick') {
@@ -245,7 +281,7 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
   }, [movementMode, movementSnapshot.rawE, movementSnapshot.rawX, movementSnapshot.rawY, movementSnapshot.rawZ, zBounds])
 
   useEffect(() => {
-    if (movementMode !== 'joystick' || (joystickVector.x === 0 && joystickVector.y === 0)) {
+    if (movementMode !== 'joystick' || isXyzMovementLocked || (joystickVector.x === 0 && joystickVector.y === 0)) {
       return
     }
 
@@ -275,9 +311,13 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
         window.cancelAnimationFrame(frameHandle)
       }
     }
-  }, [joystickVector.x, joystickVector.y, movementMode, zBounds])
+  }, [isXyzMovementLocked, joystickVector.x, joystickVector.y, movementMode, zBounds])
 
   async function handleAxisMove(axis: AxisId, direction: -1 | 1): Promise<void> {
+    if (isXyzMovementLocked) {
+      return
+    }
+
     const distanceMm = direction * moveStepMm
     const ok = await onAxisMove(axis, distanceMm)
     if (!ok) {
@@ -299,6 +339,10 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
   }
 
   async function handleFilamentMove(direction: -1 | 1): Promise<void> {
+    if (isFilamentMoveLocked) {
+      return
+    }
+
     const ok = await onFilamentMove(direction)
     if (!ok) {
       return
@@ -311,10 +355,26 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
   }
 
   function handleJoystickZChange(nextValue: number): void {
+    if (isXyzMovementLocked) {
+      return
+    }
+
     setPrintHeadPosition((prevPosition) => ({
       ...prevPosition,
       z: clampAxisValue(nextValue, zBounds.min, zBounds.max),
     }))
+  }
+
+  function showLockPopup(message: string | null): void {
+    if (message === null) {
+      return
+    }
+
+    lockPopupIdRef.current += 1
+    setLockPopup({
+      id: lockPopupIdRef.current,
+      message,
+    })
   }
 
   return (
@@ -322,6 +382,26 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
       <div className="control-card-head">
         <h3 className="control-card-title">Оси</h3>
       </div>
+      {lockPopup !== null ? (
+        <div
+          key={lockPopup.id}
+          className="control-lock-popup"
+          role="alertdialog"
+          aria-live="assertive"
+          aria-label="Причина блокировки"
+          data-testid="movement-lock-popup"
+        >
+          <p>{lockPopup.message}</p>
+          <button
+            type="button"
+            className="control-lock-popup-close"
+            aria-label="Закрыть уведомление"
+            onClick={() => setLockPopup(null)}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
       <SegmentedToggle
         options={CONTROL_MOVEMENT_MODE_OPTIONS}
         value={movementMode}
@@ -365,6 +445,14 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
               onMove={(axis, direction) => void handleAxisMove(axis, direction)}
               onFilamentMove={(direction) => void handleFilamentMove(direction)}
               disabled={isBusy}
+              disabledAxes={{
+                X: isXyzMovementLocked,
+                Y: isXyzMovementLocked,
+                Z: isXyzMovementLocked,
+              }}
+              filamentDisabled={isFilamentMoveLocked}
+              onBlockedMove={() => showLockPopup(movementLockLabel)}
+              onBlockedFilamentMove={() => showLockPopup(filamentLockLabel)}
             />
           </div>
         </div>
@@ -374,7 +462,7 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
             <p className="joystick-axis-title">XY</p>
             <VirtualJoystick
               testId="axis-joystick"
-              disabled={isBusy}
+              disabled={isBusy || isXyzMovementLocked}
               onVectorChange={setJoystickVector}
             />
           </div>
@@ -387,7 +475,7 @@ const AxisMotionPanel = memo(function AxisMotionPanel({
               step={1}
               onChange={handleJoystickZChange}
               minAtTop
-              disabled={isBusy}
+              disabled={isBusy || isXyzMovementLocked}
               testId="axis-z-slider"
             />
           </div>

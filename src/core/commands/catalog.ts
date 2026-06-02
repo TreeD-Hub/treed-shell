@@ -33,8 +33,16 @@ export interface TreeDCommandRuntimeContext {
     isPaused: boolean
   }
   homedAxes?: string
+  toolhead?: {
+    rawX?: number
+    rawY?: number
+    rawZ?: number
+  }
   eddyStatus?: PrinterEddyStatus
+  extruderTemp?: number
 }
+
+const MIN_FILAMENT_EXTRUDE_TEMP_C = 170
 
 const COMMAND_CAPABILITY_LABELS: Record<TreeDCommandCapability, string> = {
   print: 'печать',
@@ -292,6 +300,23 @@ function isAxisHomed(homedAxes: string | undefined, axis: AxisId): boolean {
   return homedAxes.toLowerCase().includes(axis.toLowerCase())
 }
 
+function areXyzAxesHomed(homedAxes: string | undefined): boolean {
+  if (homedAxes === undefined) {
+    return false
+  }
+
+  return isAxisHomed(homedAxes, 'X') && isAxisHomed(homedAxes, 'Y') && isAxisHomed(homedAxes, 'Z')
+}
+
+function areXyzCoordinatesKnown(toolhead: TreeDCommandRuntimeContext['toolhead']): boolean {
+  return (
+    toolhead !== undefined &&
+    Number.isFinite(toolhead.rawX) &&
+    Number.isFinite(toolhead.rawY) &&
+    Number.isFinite(toolhead.rawZ)
+  )
+}
+
 function getCommandSpecificBlockReason(
   command: PrinterCommandId,
   context: TreeDCommandRuntimeContext,
@@ -341,8 +366,25 @@ function getCommandSpecificBlockReason(
     }
   }
 
-  if (args?.command === 'moveAxis' && !isAxisHomed(context.homedAxes, args.axis)) {
-    return `${item.label}: ось ${args.axis} не захоумлена.`
+  if (command === 'moveAxis' || args?.command === 'moveAxis') {
+    if (!areXyzAxesHomed(context.homedAxes)) {
+      return `${item.label}: сначала выполните Home XYZ.`
+    }
+
+    if (!areXyzCoordinatesKnown(context.toolhead)) {
+      return `${item.label}: координаты XYZ неизвестны.`
+    }
+  }
+
+  if (
+    (command === 'loadFilament' || command === 'unloadFilament') &&
+    (
+      context.extruderTemp === undefined ||
+      !Number.isFinite(context.extruderTemp) ||
+      context.extruderTemp < MIN_FILAMENT_EXTRUDE_TEMP_C
+    )
+  ) {
+    return `${item.label}: сопло должно быть не ниже ${MIN_FILAMENT_EXTRUDE_TEMP_C}°C.`
   }
 
   return null
