@@ -1,16 +1,104 @@
-import { memo } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
+import { usePrinterStoreSelector } from '../../core/store/printerStore'
+import type { PrinterSnapshot } from '../../core/transport/types'
 import {
   AxisCrossControls,
   SegmentedToggle,
   VerticalAxisSlider,
   VirtualJoystick,
+  type AxisId,
+  type JoystickVector,
 } from '../../ui'
 import {
   CONTROL_MOVE_STEP_OPTIONS,
   CONTROL_MOVEMENT_MODE_OPTIONS,
   CONTROL_PARKING_AXIS_OPTIONS,
 } from '../config'
-import type { MovementControlPanelProps } from '../types'
+import type { AxisCoordinateItem, AxisHomeStatus, MovementControlPanelProps, PrintHeadPosition } from '../types'
+
+const HEAD_X_BOUNDS_MM = { min: 0, max: 250 } as const
+const HEAD_Y_BOUNDS_MM = { min: 0, max: 250 } as const
+const MAX_JOYSTICK_SPEED_MM_S = 50
+const HOMED_AXIS_IDS: readonly AxisId[] = ['X', 'Y', 'Z']
+
+type MovementSnapshotInput = {
+  rawX: number
+  rawY: number
+  rawZ: number
+  rawE: number
+  homedAxes: string
+}
+
+type AxisMotionPanelProps = Pick<
+  MovementControlPanelProps,
+  | 'isBusy'
+  | 'movementMode'
+  | 'moveStepKey'
+  | 'zBounds'
+  | 'onMovementModeChange'
+  | 'onMoveStepChange'
+  | 'onAxisMove'
+  | 'onFilamentMove'
+>
+
+function selectMovementSnapshotInput(snapshot: PrinterSnapshot): MovementSnapshotInput {
+  return {
+    rawX: snapshot.toolhead.rawX,
+    rawY: snapshot.toolhead.rawY,
+    rawZ: snapshot.toolhead.rawZ,
+    rawE: snapshot.toolhead.rawE,
+    homedAxes: snapshot.homedAxes,
+  }
+}
+
+function isMovementSnapshotInputEqual(left: MovementSnapshotInput, right: MovementSnapshotInput): boolean {
+  return (
+    left.rawX === right.rawX &&
+    left.rawY === right.rawY &&
+    left.rawZ === right.rawZ &&
+    left.rawE === right.rawE &&
+    left.homedAxes === right.homedAxes
+  )
+}
+
+function clampAxisValue(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function normalizeHeadPosition(position: PrintHeadPosition, zBounds: { min: number; max: number }): PrintHeadPosition {
+  return {
+    x: clampAxisValue(position.x, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max),
+    y: clampAxisValue(position.y, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max),
+    z: clampAxisValue(position.z, zBounds.min, zBounds.max),
+    e: position.e,
+  }
+}
+
+function formatAxisCoordinate(value: number): string {
+  return value.toFixed(1)
+}
+
+function getMoveStepMm(moveStepKey: MovementControlPanelProps['moveStepKey']): number {
+  return CONTROL_MOVE_STEP_OPTIONS.find((item) => item.id === moveStepKey)?.valueMm ?? 1
+}
+
+function buildAxisCoordinateItems(position: PrintHeadPosition): AxisCoordinateItem[] {
+  return [
+    { axis: 'X', value: formatAxisCoordinate(position.x) },
+    { axis: 'Y', value: formatAxisCoordinate(position.y) },
+    { axis: 'Z', value: formatAxisCoordinate(position.z) },
+    { axis: 'E', value: formatAxisCoordinate(position.e) },
+  ]
+}
+
+function buildAxisHomeStatuses(homedAxes: string): AxisHomeStatus[] {
+  const normalizedHomedAxes = homedAxes.toLocaleLowerCase('en-US')
+
+  return HOMED_AXIS_IDS.map((axis) => ({
+    axis,
+    homed: normalizedHomedAxes.includes(axis.toLocaleLowerCase('en-US')),
+  }))
+}
 
 export const MovementControlPanel = memo(function MovementControlPanel({
   pendingCommand,
@@ -18,12 +106,7 @@ export const MovementControlPanel = memo(function MovementControlPanel({
   activeControlFlashKey,
   movementMode,
   moveStepKey,
-  printHeadPosition,
   zBounds,
-  axisCoordinatesLabel,
-  axisCoordinateItems,
-  axisHomeStatuses,
-  joystickSpeedMmS,
   onParkingTargetSelect,
   onServiceModeToggle,
   onMotorsDisable,
@@ -31,9 +114,11 @@ export const MovementControlPanel = memo(function MovementControlPanel({
   onMoveStepChange,
   onAxisMove,
   onFilamentMove,
-  onJoystickVectorChange,
-  onJoystickZChange,
 }: MovementControlPanelProps) {
+  async function handleParkingSelect(nextMode: 'all' | 'axis', nextAxis?: AxisId): Promise<void> {
+    await onParkingTargetSelect(nextMode, nextAxis)
+  }
+
   return (
     <div className="control-grid">
       <article className="control-card control-card-parking">
@@ -49,7 +134,7 @@ export const MovementControlPanel = memo(function MovementControlPanel({
             className={`control-target-btn ${activeControlFlashKey === 'parking-all' ? 'is-active' : ''}`}
             aria-pressed={activeControlFlashKey === 'parking-all'}
             data-testid="parking-mode-all"
-            onClick={() => onParkingTargetSelect('all')}
+            onClick={() => void handleParkingSelect('all')}
             disabled={isBusy}
           >
             XYZ
@@ -61,7 +146,7 @@ export const MovementControlPanel = memo(function MovementControlPanel({
               className={`control-target-btn ${activeControlFlashKey === `parking-${option.id}` ? 'is-active' : ''}`}
               aria-pressed={activeControlFlashKey === `parking-${option.id}`}
               data-testid={`parking-axis-${option.id}`}
-              onClick={() => onParkingTargetSelect('axis', option.id)}
+              onClick={() => void handleParkingSelect('axis', option.id)}
               disabled={isBusy}
             >
               {option.label}
@@ -88,92 +173,236 @@ export const MovementControlPanel = memo(function MovementControlPanel({
         </button>
       </article>
 
-      <article className="control-card control-card-motion">
-        <div className="control-card-head">
-          <h3 className="control-card-title">Оси</h3>
-        </div>
-        <SegmentedToggle
-          options={CONTROL_MOVEMENT_MODE_OPTIONS}
-          value={movementMode}
-          onChange={onMovementModeChange}
-          ariaLabel="Режим перемещения"
-          testIdPrefix="move-mode"
-        />
-        {movementMode === 'buttons' ? (
-          <div className="control-motion-buttons">
-            <SegmentedToggle
-              options={CONTROL_MOVE_STEP_OPTIONS}
-              value={moveStepKey}
-              onChange={onMoveStepChange}
-              ariaLabel="Шаг перемещения"
-              testIdPrefix="move-step"
-            />
-            <div className="control-coordinates-panel control-subpanel">
-              <p className="joystick-readout axis-coordinate-readout" data-testid="axis-coordinates" aria-label={axisCoordinatesLabel}>
-                {axisCoordinateItems.map((item) => (
-                  <span key={item.axis} className="axis-coordinate-item">
-                    <span className="axis-coordinate-axis">{item.axis}</span>
-                    <span className="axis-coordinate-value">{item.value}</span>
-                  </span>
-                ))}
-              </p>
-              <div className="axis-home-status" aria-label="Статус хоуминга осей">
-                {axisHomeStatuses.map((item) => (
-                  <span
-                    key={item.axis}
-                    className={`axis-home-indicator${item.homed ? ' is-homed' : ''}`}
-                    aria-label={`Ось ${item.axis} ${item.homed ? 'захоумлена' : 'не захоумлена'}`}
-                  >
-                    <span className="axis-home-label">{item.axis}</span>
-                    <span className="axis-home-mark" aria-hidden="true" />
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="control-cross-wrap">
-              <AxisCrossControls
-                onMove={onAxisMove}
-                onFilamentMove={onFilamentMove}
-                disabled={isBusy}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="joystick-panel">
-            <div className="joystick-xy-control">
-              <p className="joystick-axis-title">XY</p>
-              <VirtualJoystick
-                testId="axis-joystick"
-                disabled={isBusy}
-                onVectorChange={onJoystickVectorChange}
-              />
-            </div>
-            <div className="joystick-z-control">
-              <p className="joystick-axis-title">Z</p>
-              <VerticalAxisSlider
-                value={printHeadPosition.z}
-                min={zBounds.min}
-                max={zBounds.max}
-                step={1}
-                onChange={onJoystickZChange}
-                minAtTop
-                disabled={isBusy}
-                testId="axis-z-slider"
-              />
-            </div>
-            <div className="joystick-meta">
-              <div className="joystick-meta-block">
-                <p className="joystick-meta-label">Координаты</p>
-                <p className="joystick-readout control-subpanel" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
-              </div>
-              <div className="joystick-meta-block">
-                <p className="joystick-meta-label">Скорость XY</p>
-                <p className="joystick-readout control-subpanel">{joystickSpeedMmS.toFixed(1)} / 50 мм/с</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </article>
+      <AxisMotionPanel
+        isBusy={isBusy}
+        movementMode={movementMode}
+        moveStepKey={moveStepKey}
+        zBounds={zBounds}
+        onMovementModeChange={onMovementModeChange}
+        onMoveStepChange={onMoveStepChange}
+        onAxisMove={onAxisMove}
+        onFilamentMove={onFilamentMove}
+      />
     </div>
+  )
+})
+
+const AxisMotionPanel = memo(function AxisMotionPanel({
+  isBusy,
+  movementMode,
+  moveStepKey,
+  zBounds,
+  onMovementModeChange,
+  onMoveStepChange,
+  onAxisMove,
+  onFilamentMove,
+}: AxisMotionPanelProps) {
+  const movementSnapshot = usePrinterStoreSelector(
+    selectMovementSnapshotInput,
+    isMovementSnapshotInputEqual,
+  )
+  const [joystickVector, setJoystickVector] = useState<JoystickVector>({ x: 0, y: 0 })
+  const [printHeadPosition, setPrintHeadPosition] = useState<PrintHeadPosition>(() =>
+    normalizeHeadPosition({
+      x: movementSnapshot.rawX,
+      y: movementSnapshot.rawY,
+      z: movementSnapshot.rawZ,
+      e: movementSnapshot.rawE,
+    }, zBounds),
+  )
+  const moveStepMm = useMemo(() => getMoveStepMm(moveStepKey), [moveStepKey])
+  const joystickSpeedMmS = useMemo(
+    () => Math.hypot(joystickVector.x, joystickVector.y) * MAX_JOYSTICK_SPEED_MM_S,
+    [joystickVector.x, joystickVector.y],
+  )
+  const axisCoordinatesLabel = `X ${formatAxisCoordinate(printHeadPosition.x)}  Y ${formatAxisCoordinate(printHeadPosition.y)}  Z ${formatAxisCoordinate(printHeadPosition.z)}  E ${formatAxisCoordinate(printHeadPosition.e)}`
+  const axisCoordinateItems = useMemo(
+    () => buildAxisCoordinateItems(printHeadPosition),
+    [printHeadPosition],
+  )
+  const axisHomeStatuses = useMemo(
+    () => buildAxisHomeStatuses(movementSnapshot.homedAxes),
+    [movementSnapshot.homedAxes],
+  )
+
+  useEffect(() => {
+    if (movementMode !== 'joystick' && (joystickVector.x !== 0 || joystickVector.y !== 0)) {
+      setJoystickVector({ x: 0, y: 0 })
+    }
+  }, [joystickVector.x, joystickVector.y, movementMode])
+
+  useEffect(() => {
+    if (movementMode === 'joystick') {
+      return
+    }
+
+    setPrintHeadPosition(normalizeHeadPosition({
+      x: movementSnapshot.rawX,
+      y: movementSnapshot.rawY,
+      z: movementSnapshot.rawZ,
+      e: movementSnapshot.rawE,
+    }, zBounds))
+  }, [movementMode, movementSnapshot.rawE, movementSnapshot.rawX, movementSnapshot.rawY, movementSnapshot.rawZ, zBounds])
+
+  useEffect(() => {
+    if (movementMode !== 'joystick' || (joystickVector.x === 0 && joystickVector.y === 0)) {
+      return
+    }
+
+    let frameHandle: number | null = null
+    let previousTimestamp: number | null = null
+
+    const tick = (timestamp: number) => {
+      if (previousTimestamp === null) {
+        previousTimestamp = timestamp
+      }
+      const deltaSeconds = clampAxisValue((timestamp - previousTimestamp) / 1000, 0, 0.1)
+      previousTimestamp = timestamp
+
+      setPrintHeadPosition((prevPosition) => normalizeHeadPosition({
+        x: prevPosition.x + (joystickVector.x * MAX_JOYSTICK_SPEED_MM_S * deltaSeconds),
+        y: prevPosition.y + (joystickVector.y * MAX_JOYSTICK_SPEED_MM_S * deltaSeconds),
+        z: prevPosition.z,
+        e: prevPosition.e,
+      }, zBounds))
+
+      frameHandle = window.requestAnimationFrame(tick)
+    }
+
+    frameHandle = window.requestAnimationFrame(tick)
+    return () => {
+      if (frameHandle !== null) {
+        window.cancelAnimationFrame(frameHandle)
+      }
+    }
+  }, [joystickVector.x, joystickVector.y, movementMode, zBounds])
+
+  async function handleAxisMove(axis: AxisId, direction: -1 | 1): Promise<void> {
+    const distanceMm = direction * moveStepMm
+    const ok = await onAxisMove(axis, distanceMm)
+    if (!ok) {
+      return
+    }
+
+    setPrintHeadPosition((prevPosition) => ({
+      ...prevPosition,
+      x: axis === 'X'
+        ? clampAxisValue(prevPosition.x + distanceMm, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max)
+        : prevPosition.x,
+      y: axis === 'Y'
+        ? clampAxisValue(prevPosition.y + distanceMm, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max)
+        : prevPosition.y,
+      z: axis === 'Z'
+        ? clampAxisValue(prevPosition.z + distanceMm, zBounds.min, zBounds.max)
+        : prevPosition.z,
+    }))
+  }
+
+  async function handleFilamentMove(direction: -1 | 1): Promise<void> {
+    const ok = await onFilamentMove(direction)
+    if (!ok) {
+      return
+    }
+
+    setPrintHeadPosition((prevPosition) => ({
+      ...prevPosition,
+      e: prevPosition.e - (direction * moveStepMm),
+    }))
+  }
+
+  function handleJoystickZChange(nextValue: number): void {
+    setPrintHeadPosition((prevPosition) => ({
+      ...prevPosition,
+      z: clampAxisValue(nextValue, zBounds.min, zBounds.max),
+    }))
+  }
+
+  return (
+    <article className="control-card control-card-motion">
+      <div className="control-card-head">
+        <h3 className="control-card-title">Оси</h3>
+      </div>
+      <SegmentedToggle
+        options={CONTROL_MOVEMENT_MODE_OPTIONS}
+        value={movementMode}
+        onChange={onMovementModeChange}
+        ariaLabel="Режим перемещения"
+        testIdPrefix="move-mode"
+      />
+      {movementMode === 'buttons' ? (
+        <div className="control-motion-buttons">
+          <SegmentedToggle
+            options={CONTROL_MOVE_STEP_OPTIONS}
+            value={moveStepKey}
+            onChange={onMoveStepChange}
+            ariaLabel="Шаг перемещения"
+            testIdPrefix="move-step"
+          />
+          <div className="control-coordinates-panel control-subpanel">
+            <p className="joystick-readout axis-coordinate-readout" data-testid="axis-coordinates" aria-label={axisCoordinatesLabel}>
+              {axisCoordinateItems.map((item) => (
+                <span key={item.axis} className="axis-coordinate-item">
+                  <span className="axis-coordinate-axis">{item.axis}</span>
+                  <span className="axis-coordinate-value">{item.value}</span>
+                </span>
+              ))}
+            </p>
+            <div className="axis-home-status" aria-label="Статус хоуминга осей">
+              {axisHomeStatuses.map((item) => (
+                <span
+                  key={item.axis}
+                  className={`axis-home-indicator${item.homed ? ' is-homed' : ''}`}
+                  aria-label={`Ось ${item.axis} ${item.homed ? 'захоумлена' : 'не захоумлена'}`}
+                >
+                  <span className="axis-home-label">{item.axis}</span>
+                  <span className="axis-home-mark" aria-hidden="true" />
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="control-cross-wrap">
+            <AxisCrossControls
+              onMove={(axis, direction) => void handleAxisMove(axis, direction)}
+              onFilamentMove={(direction) => void handleFilamentMove(direction)}
+              disabled={isBusy}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="joystick-panel">
+          <div className="joystick-xy-control">
+            <p className="joystick-axis-title">XY</p>
+            <VirtualJoystick
+              testId="axis-joystick"
+              disabled={isBusy}
+              onVectorChange={setJoystickVector}
+            />
+          </div>
+          <div className="joystick-z-control">
+            <p className="joystick-axis-title">Z</p>
+            <VerticalAxisSlider
+              value={printHeadPosition.z}
+              min={zBounds.min}
+              max={zBounds.max}
+              step={1}
+              onChange={handleJoystickZChange}
+              minAtTop
+              disabled={isBusy}
+              testId="axis-z-slider"
+            />
+          </div>
+          <div className="joystick-meta">
+            <div className="joystick-meta-block">
+              <p className="joystick-meta-label">Координаты</p>
+              <p className="joystick-readout control-subpanel" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
+            </div>
+            <div className="joystick-meta-block">
+              <p className="joystick-meta-label">Скорость XY</p>
+              <p className="joystick-readout control-subpanel">{joystickSpeedMmS.toFixed(1)} / 50 мм/с</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
   )
 })

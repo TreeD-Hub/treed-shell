@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { PrinterCommandId } from '../core/commands'
-import type { AxisId, JoystickVector, UiIconName } from '../ui'
+import type { AxisId, UiIconName } from '../ui'
 
 export type ControlGroupId = 'movement' | 'heating' | 'fans' | 'lighting' | 'maintenance'
 export type ParkingMode = 'all' | 'axis'
@@ -79,24 +79,17 @@ export type MovementControlPanelProps = {
   activeControlFlashKey: string | null
   movementMode: MovementMode
   moveStepKey: MoveStepKey
-  printHeadPosition: PrintHeadPosition
   zBounds: {
     min: number
     max: number
   }
-  axisCoordinatesLabel: string
-  axisCoordinateItems: AxisCoordinateItem[]
-  axisHomeStatuses: AxisHomeStatus[]
-  joystickSpeedMmS: number
-  onParkingTargetSelect: (nextMode: ParkingMode, nextAxis?: AxisId) => void
+  onParkingTargetSelect: (nextMode: ParkingMode, nextAxis?: AxisId) => Promise<boolean>
   onServiceModeToggle: () => void
   onMotorsDisable: () => void
   onMovementModeChange: (nextMode: MovementMode) => void
   onMoveStepChange: (nextStep: MoveStepKey) => void
-  onAxisMove: (axis: AxisId, direction: -1 | 1) => void
-  onFilamentMove: (direction: -1 | 1) => void
-  onJoystickVectorChange: (nextVector: JoystickVector) => void
-  onJoystickZChange: (nextValue: number) => void
+  onAxisMove: (axis: AxisId, distanceMm: number) => Promise<boolean>
+  onFilamentMove: (direction: -1 | 1) => Promise<boolean>
 }
 
 export type HeatingControlPanelProps = {

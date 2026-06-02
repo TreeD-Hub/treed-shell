@@ -27,13 +27,11 @@ import {
   statusLabel,
 } from './dashboard/helpers'
 import {
-  CONTROL_MOVE_STEP_OPTIONS,
   ControlPage,
   type ControlGroupId,
   type MoveStepKey,
   type MovementMode,
   type ParkingMode,
-  type PrintHeadPosition,
   type TemperatureKeyboardTarget,
 } from './control'
 import {
@@ -55,7 +53,6 @@ import {
   TuneModeToggle,
   TuneNumberControl,
   type AxisId,
-  type JoystickVector,
 } from './ui'
 import { PRINT_FILE_LIBRARY, type PrintFileItem } from './printFiles'
 import type { PrinterConnectionState } from './core/transport/types'
@@ -226,7 +223,6 @@ const MACROS_PARKING_AXIS_OPTIONS: Array<{ id: AxisId; label: string }> = [
   { id: 'Y', label: 'Y' },
   { id: 'Z', label: 'Z' },
 ]
-const HOMED_AXIS_IDS: readonly AxisId[] = ['X', 'Y', 'Z']
 const SETTINGS_GROUP_OPTIONS: Array<SettingsMenuOption<SettingsGroupId>> = [
   { id: 'network', label: 'Сеть', icon: 'statusWifi' },
   { id: 'system', label: 'Система', icon: 'menuSettings' },
@@ -372,11 +368,8 @@ const WIFI_NETWORK_LIBRARY: WifiNetworkItem[] = [
 const DEFAULT_SELECTED_WIFI_NETWORK_ID = WIFI_NETWORK_LIBRARY.find((item) => item.connected)?.id ?? WIFI_NETWORK_LIBRARY[0]?.id ?? null
 const DEFAULT_NOZZLE_TARGET_TEMP = TEMPERATURE_METRIC_DEFINITIONS.find((item) => item.key === 'nozzle')?.target ?? 220
 const DEFAULT_BED_TARGET_TEMP = TEMPERATURE_METRIC_DEFINITIONS.find((item) => item.key === 'bed')?.target ?? 60
-const HEAD_X_BOUNDS_MM = { min: 0, max: 250 } as const
-const HEAD_Y_BOUNDS_MM = { min: 0, max: 250 } as const
 const HEAD_Z_BOUNDS_MM = { min: 0, max: 200 } as const
 const Z_OFFSET_BOUNDS_MM = { min: -2, max: 2 } as const
-const MAX_JOYSTICK_SPEED_MM_S = 50
 const BED_SCREW_MOVE_DURATION_MS = 650
 const BED_SCREW_GUIDE_POINTS: BedScrewPoint[] = [
   { id: 'front-left', label: 'Передний левый', xMm: 35, yMm: 35, mapX: 14, mapY: 18 },
@@ -433,15 +426,6 @@ function formatTuneKeyboardValue(value: number, fractionDigits: number): string 
   return value
     .toFixed(fractionDigits)
     .replace(/\.?0+$/, '')
-}
-
-function normalizeHeadPosition(position: PrintHeadPosition): PrintHeadPosition {
-  return {
-    x: clampAxisValue(position.x, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max),
-    y: clampAxisValue(position.y, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max),
-    z: clampAxisValue(position.z, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max),
-    e: position.e,
-  }
 }
 
 function formatAxisCoordinate(value: number): string {
@@ -646,15 +630,6 @@ function App() {
   const [maintenanceChecklistState, setMaintenanceChecklistState] = useState<Record<MaintenanceChecklistItemId, boolean>>(() =>
     createMaintenanceChecklistState(false),
   )
-  const [joystickVector, setJoystickVector] = useState<JoystickVector>({ x: 0, y: 0 })
-  const [printHeadPosition, setPrintHeadPosition] = useState<PrintHeadPosition>(() =>
-    normalizeHeadPosition({
-      x: snapshot.toolheadX,
-      y: snapshot.toolheadY,
-      z: snapshot.toolheadZ,
-      e: 0,
-    }),
-  )
   const idleNotesInputRef = useRef<HTMLTextAreaElement | null>(null)
   const wifiSearchInputRef = useRef<HTMLInputElement | null>(null)
   const wifiPasswordInputRef = useRef<HTMLInputElement | null>(null)
@@ -798,26 +773,6 @@ function App() {
     () => wifiNetworks.find((item) => item.connected) ?? null,
     [wifiNetworks],
   )
-  const moveStepMm = useMemo(() => {
-    const selectedStep = CONTROL_MOVE_STEP_OPTIONS.find((item) => item.id === moveStepKey)
-    return selectedStep?.valueMm ?? 1
-  }, [moveStepKey])
-  const joystickSpeedMmS = useMemo(
-    () => Math.hypot(joystickVector.x, joystickVector.y) * MAX_JOYSTICK_SPEED_MM_S,
-    [joystickVector.x, joystickVector.y],
-  )
-  const axisCoordinatesLabel = `X ${formatAxisCoordinate(printHeadPosition.x)}  Y ${formatAxisCoordinate(printHeadPosition.y)}  Z ${formatAxisCoordinate(printHeadPosition.z)}  E ${formatAxisCoordinate(printHeadPosition.e)}`
-  const axisCoordinateItems = [
-    { axis: 'X', value: formatAxisCoordinate(printHeadPosition.x) },
-    { axis: 'Y', value: formatAxisCoordinate(printHeadPosition.y) },
-    { axis: 'Z', value: formatAxisCoordinate(printHeadPosition.z) },
-    { axis: 'E', value: formatAxisCoordinate(printHeadPosition.e) },
-  ]
-  const homedAxes = snapshot.homedAxes.toLocaleLowerCase('en-US')
-  const axisHomeStatuses = HOMED_AXIS_IDS.map((axis) => ({
-    axis,
-    homed: homedAxes.includes(axis.toLocaleLowerCase('en-US')),
-  }))
   const activeBedScrewPoint = BED_SCREW_GUIDE_POINTS.find((point) => point.id === activeBedScrewPointId) ?? null
   const activeBedScrewPointLabel = activeBedScrewPoint === null
     ? 'Текущая точка не выбрана.'
@@ -1178,11 +1133,6 @@ function App() {
     setIsBedScrewPointMoving(true)
     setActiveBedScrewPointId(selectedPoint.id)
     setBedScrewGuideNotice(`Перемещение к точке ${selectedPointIndex + 1}...`)
-    setPrintHeadPosition((currentPosition) => ({
-      ...currentPosition,
-      x: clampAxisValue(selectedPoint.xMm, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max),
-      y: clampAxisValue(selectedPoint.yMm, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max),
-    }))
     setVisitedBedScrewPointIds((currentPoints) => {
       const nextPoints = currentPoints.includes(selectedPoint.id)
         ? currentPoints
@@ -1239,35 +1189,7 @@ function App() {
       return
     }
 
-    setPrintHeadPosition((currentPosition) => {
-      if (manualBedParkingMode === 'all') {
-        return {
-          ...currentPosition,
-          x: 0,
-          y: 0,
-          z: 0,
-        }
-      }
-
-      if (manualBedParkingAxis === 'X') {
-        return {
-          ...currentPosition,
-          x: 0,
-        }
-      }
-
-      if (manualBedParkingAxis === 'Y') {
-        return {
-          ...currentPosition,
-          y: 0,
-        }
-      }
-
-      return {
-        ...currentPosition,
-        z: 0,
-      }
-    })
+    setBedScrewGuideNotice(`${manualBedParkingActionLabel}: команда будет подключена при пересборке макросов.`)
   }
 
   function handleManualBedPointPick(pointId: BedScrewPointId): void {
@@ -1288,11 +1210,6 @@ function App() {
 
     bedScrewMoveTimeoutRef.current = window.setTimeout(() => {
       bedScrewMoveTimeoutRef.current = null
-      setPrintHeadPosition((currentPosition) => ({
-        ...currentPosition,
-        x: clampAxisValue(selectedPoint.xMm, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max),
-        y: clampAxisValue(selectedPoint.yMm, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max),
-      }))
       setVisitedBedScrewPointIds((currentPoints) => {
         const nextPoints = currentPoints.includes(selectedPoint.id)
           ? currentPoints
@@ -1433,7 +1350,7 @@ function App() {
     }
   }
 
-  async function handleParkingTargetSelect(nextMode: ParkingMode, nextAxis?: AxisId): Promise<void> {
+  async function handleParkingTargetSelect(nextMode: ParkingMode, nextAxis?: AxisId): Promise<boolean> {
     const resolvedAxis = nextMode === 'axis' ? (nextAxis ?? parkingAxis) : parkingAxis
 
     setParkingMode(nextMode)
@@ -1445,62 +1362,23 @@ function App() {
     const command = nextMode === 'all' ? 'homeAll' : resolvedAxis === 'Z' ? 'homeZ' : 'homeXY'
     const ok = await executeCommand({ command })
     if (!ok) {
-      return
+      return false
     }
 
     await refresh()
-    setPrintHeadPosition((prevPosition) => {
-      if (nextMode === 'all') {
-        return { ...prevPosition, x: 0, y: 0, z: 0 }
-      }
-
-      if (resolvedAxis === 'X') {
-        return { ...prevPosition, x: 0 }
-      }
-
-      if (resolvedAxis === 'Y') {
-        return { ...prevPosition, y: 0 }
-      }
-
-      return { ...prevPosition, z: 0 }
-    })
+    return true
   }
 
   function handleServiceModeToggle(): void {
     flashControlAction('service-mode')
   }
 
-  function handleAxisMove(axis: AxisId, direction: -1 | 1): void {
-    const distanceMm = direction * moveStepMm
-    void executeCommand({ command: 'moveAxis', axis, distanceMm }).then((ok) => {
-      if (!ok) {
-        return
-      }
-
-      setPrintHeadPosition((prevPosition) => {
-        return {
-          ...prevPosition,
-          x: axis === 'X'
-            ? clampAxisValue(prevPosition.x + distanceMm, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max)
-            : prevPosition.x,
-          y: axis === 'Y'
-            ? clampAxisValue(prevPosition.y + distanceMm, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max)
-            : prevPosition.y,
-          z: axis === 'Z'
-            ? clampAxisValue(prevPosition.z + distanceMm, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max)
-            : prevPosition.z,
-        }
-      })
-    })
+  function handleAxisMove(axis: AxisId, distanceMm: number): Promise<boolean> {
+    return executeCommand({ command: 'moveAxis', axis, distanceMm })
   }
 
-  function handleFilamentMove(direction: -1 | 1): void {
-    setPrintHeadPosition((prevPosition) => ({
-      ...prevPosition,
-      e: prevPosition.e - (direction * moveStepMm),
-    }))
-
-    void executeCommand({ command: direction > 0 ? 'unloadFilament' : 'loadFilament' })
+  function handleFilamentMove(direction: -1 | 1): Promise<boolean> {
+    return executeCommand({ command: direction > 0 ? 'unloadFilament' : 'loadFilament' })
   }
 
   function flashControlAction(nextKey: string): void {
@@ -1514,17 +1392,6 @@ function App() {
       setActiveControlFlashKey((currentKey) => (currentKey === nextKey ? null : currentKey))
       controlFlashTimeoutRef.current = null
     }, 1000)
-  }
-
-  function handleJoystickVectorChange(nextVector: JoystickVector): void {
-    setJoystickVector(nextVector)
-  }
-
-  function handleJoystickZChange(nextValue: number): void {
-    setPrintHeadPosition((prevPosition) => ({
-      ...prevPosition,
-      z: clampAxisValue(nextValue, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max),
-    }))
   }
 
   function handleMotorsDisable(): void {
@@ -1911,58 +1778,6 @@ function App() {
       closeFileModal()
     }
   }, [activeScreen, closeFileModal, selectedFileId])
-
-  useEffect(() => {
-    if (movementMode !== 'joystick' && (joystickVector.x !== 0 || joystickVector.y !== 0)) {
-      setJoystickVector({ x: 0, y: 0 })
-    }
-  }, [joystickVector.x, joystickVector.y, movementMode])
-
-  useEffect(() => {
-    if (movementMode === 'joystick') {
-      return
-    }
-
-    setPrintHeadPosition(normalizeHeadPosition({
-      x: snapshot.toolhead.rawX,
-      y: snapshot.toolhead.rawY,
-      z: snapshot.toolhead.rawZ,
-      e: snapshot.toolhead.rawE,
-    }))
-  }, [movementMode, snapshot.toolhead.rawX, snapshot.toolhead.rawY, snapshot.toolhead.rawZ, snapshot.toolhead.rawE])
-
-  useEffect(() => {
-    if (movementMode !== 'joystick' || (joystickVector.x === 0 && joystickVector.y === 0)) {
-      return
-    }
-
-    let frameHandle: number | null = null
-    let previousTimestamp: number | null = null
-
-    const tick = (timestamp: number) => {
-      if (previousTimestamp === null) {
-        previousTimestamp = timestamp
-      }
-      const deltaSeconds = clampAxisValue((timestamp - previousTimestamp) / 1000, 0, 0.1)
-      previousTimestamp = timestamp
-
-      setPrintHeadPosition((prevPosition) => normalizeHeadPosition({
-        x: prevPosition.x + (joystickVector.x * MAX_JOYSTICK_SPEED_MM_S * deltaSeconds),
-        y: prevPosition.y + (joystickVector.y * MAX_JOYSTICK_SPEED_MM_S * deltaSeconds),
-        z: prevPosition.z,
-        e: prevPosition.e,
-      }))
-
-      frameHandle = window.requestAnimationFrame(tick)
-    }
-
-    frameHandle = window.requestAnimationFrame(tick)
-    return () => {
-      if (frameHandle !== null) {
-        window.cancelAnimationFrame(frameHandle)
-      }
-    }
-  }, [joystickVector.x, joystickVector.y, movementMode])
 
   async function handlePowerMenuAction(command: (typeof POWER_MENU_ACTIONS)[number]['command']): Promise<void> {
     const action = POWER_MENU_ACTIONS.find((item) => item.command === command)
@@ -2923,21 +2738,14 @@ function App() {
                 activeControlFlashKey,
                 movementMode,
                 moveStepKey,
-                printHeadPosition,
                 zBounds: HEAD_Z_BOUNDS_MM,
-                axisCoordinatesLabel,
-                axisCoordinateItems,
-                axisHomeStatuses,
-                joystickSpeedMmS,
-                onParkingTargetSelect: (nextMode, nextAxis) => void handleParkingTargetSelect(nextMode, nextAxis),
+                onParkingTargetSelect: handleParkingTargetSelect,
                 onServiceModeToggle: handleServiceModeToggle,
                 onMotorsDisable: handleMotorsDisable,
                 onMovementModeChange: handleMovementModeChange,
                 onMoveStepChange: handleMoveStepChange,
                 onAxisMove: handleAxisMove,
                 onFilamentMove: handleFilamentMove,
-                onJoystickVectorChange: handleJoystickVectorChange,
-                onJoystickZChange: handleJoystickZChange,
               }}
               heating={{
                 rows: heatingControlRows,
