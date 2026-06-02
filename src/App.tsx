@@ -1,6 +1,14 @@
-import { type ChangeEvent, type CSSProperties, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { usePrinterCommands } from './core/commands'
+import { type ChangeEvent, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  getTreeDCommandBlockReason,
+  getTreeDCommandCatalogItem,
+  usePrinterCommands,
+  type ExecuteCommandArgs,
+  type PrinterCommandId,
+} from './core/commands'
 import { usePrinterSnapshot } from './core/store/usePrinterSnapshot'
+import { DashboardPage, type DashboardIdleWidgetId, type DashboardTuneGroupId } from './dashboard/DashboardPage'
+import { DashboardStatusDock } from './dashboard/DashboardStatusDock'
 import {
   BABYSTEP_STEP_OPTIONS,
   BOTTOM_NAV_ITEMS,
@@ -12,17 +20,17 @@ import {
   TOP_STATUS_BUTTONS,
   type TopStatusButtonId,
 } from './dashboard/config'
+import { usePrinterDisplayStatus } from './dashboard/usePrinterDisplayStatus'
 import {
   clampPercent,
   rounded,
   statusLabel,
 } from './dashboard/helpers'
 import {
-  ActionSquareButton,
   AxisCrossControls,
   HorizontalSteppedSlider,
+  IconMask,
   NavItemButton,
-  PlainMetric,
   PrintFileCard,
   PrintPreviewIcon,
   SegmentedToggle,
@@ -33,8 +41,6 @@ import {
   SettingsVirtualKeyboard,
   type SettingsMenuOption,
   type VirtualKeyboardLanguage,
-  StatusIconButton,
-  TemperatureMetric,
   TemperatureTrendChart,
   TuneCompactStepperInput,
   TuneModeToggle,
@@ -45,6 +51,7 @@ import {
   VirtualJoystick,
 } from './ui'
 import { PRINT_FILE_LIBRARY, type PrintFileItem } from './printFiles'
+import type { PrinterConnectionState } from './core/transport/types'
 import treeDLogoAsset from './assets/logo_treeD-28.svg'
 import './App.css'
 
@@ -59,6 +66,7 @@ const FALLBACK_SCREEN_WIDTH = 960
 const TOP_BAR_BUTTON_SIZE = 56
 const TOP_BAR_BUTTON_GAP = 8
 const TOP_BAR_RIGHT_PADDING = 24
+const IDLE_WIDGET_DRAG_HOLD_MS = 3000
 const FILE_MODAL_TITLE_ID = 'print-file-modal-title'
 const PRINT_CANCEL_MODAL_TITLE_ID = 'print-cancel-modal-title'
 const PRINT_TUNE_MODAL_TITLE_ID = 'print-tune-modal-title'
@@ -66,23 +74,15 @@ type FilesSortKey = 'name' | 'addedAt'
 type ParkingMode = 'all' | 'axis'
 type MovementMode = 'buttons' | 'joystick'
 type MoveStepKey = '1' | '10' | '25' | '100'
+type ControlGroupId = 'movement' | 'heating' | 'fans' | 'lighting' | 'maintenance'
 type MacrosGroupId = 'bedMesh'
+type IdleWidgetId = DashboardIdleWidgetId
 type BedCalibrationStage = 'launch' | 'manual' | 'zOffset'
 type ActivePrintUiState = 'printing' | 'paused'
 type TemperatureKeyboardTarget = 'nozzle' | 'bed'
+type MaintenanceIconName = 'runtime' | 'due' | 'interval' | 'wrench'
 type PrintTuneNumericKeyboardTarget = 'volumetricFlow' | 'flow' | 'speed' | 'accel' | 'kFactor' | 'retract' | 'layers'
-type PrintTuneGroupId =
-  | 'nozzle'
-  | 'bed'
-  | 'volumetricFlow'
-  | 'fan'
-  | 'flow'
-  | 'speed'
-  | 'accel'
-  | 'kFactor'
-  | 'retract'
-  | 'progress'
-  | 'layers'
+type PrintTuneGroupId = DashboardTuneGroupId
 type TemperatureChartMode = 'nozzle' | 'bed' | 'both'
 type KeyboardTarget = 'idleNotes' | 'wifiSearch' | 'wifiPassword' | 'consoleCommand'
 type SettingsGroupId =
@@ -114,6 +114,7 @@ type PrintHeadPosition = {
   x: number
   y: number
   z: number
+  e: number
 }
 type BedScrewPointId = 'front-left' | 'front-right' | 'rear-right' | 'rear-left' | 'center'
 type BedScrewPoint = {
@@ -128,8 +129,42 @@ const TOP_BAR_POPUP_TITLES: Record<TopStatusButtonId, string> = {
   wifi: 'Состояние Wi-Fi',
   cloud: 'Состояние облака',
   notifications: 'Уведомления',
-  power: 'Выключение принтера',
+  power: 'Питание и перезапуск',
 }
+const POWER_MENU_ACTIONS: Array<{
+  command: Extract<PrinterCommandId, 'shutdownHost' | 'rebootHost' | 'restartKlipper' | 'firmwareRestart' | 'restartMoonraker'>
+  label: string
+  details: string
+  tone?: 'default' | 'danger'
+}> = [
+  {
+    command: 'restartKlipper',
+    label: 'Restart Klipper',
+    details: 'Перезапустить Klipper без перезагрузки host.',
+  },
+  {
+    command: 'firmwareRestart',
+    label: 'Firmware restart',
+    details: 'Перезапустить прошивки MCU через Klipper.',
+  },
+  {
+    command: 'restartMoonraker',
+    label: 'Restart Moonraker',
+    details: 'Перезапустить Moonraker API.',
+  },
+  {
+    command: 'rebootHost',
+    label: 'Перезагрузить host',
+    details: 'Полная перезагрузка Linux-хоста принтера.',
+    tone: 'danger',
+  },
+  {
+    command: 'shutdownHost',
+    label: 'Выключить host',
+    details: 'Остановить host. Для включения может потребоваться физический доступ.',
+    tone: 'danger',
+  },
+]
 type TopPopupPosition = {
   top: number
   left: number
@@ -196,6 +231,7 @@ const PARKING_AXIS_OPTIONS: Array<{ id: AxisId; label: string }> = [
   { id: 'Y', label: 'Y' },
   { id: 'Z', label: 'Z' },
 ]
+const HOMED_AXIS_IDS: readonly AxisId[] = ['X', 'Y', 'Z']
 const MOVEMENT_MODE_OPTIONS: Array<{ id: MovementMode; label: string }> = [
   { id: 'buttons', label: 'Крестовина' },
   { id: 'joystick', label: 'Джойстик' },
@@ -206,6 +242,25 @@ const MOVE_STEP_OPTIONS: Array<{ id: MoveStepKey; label: string; valueMm: number
   { id: '25', label: '25 мм', valueMm: 25 },
   { id: '100', label: '100 мм', valueMm: 100 },
 ]
+const CONTROL_GROUP_OPTIONS: Array<SettingsMenuOption<ControlGroupId>> = [
+  { id: 'movement', label: 'Перемещение', icon: 'menuControl' },
+  { id: 'heating', label: 'Нагрев', icon: 'metricNozzle' },
+  { id: 'fans', label: 'Вентиляторы', icon: 'metricFan' },
+  { id: 'lighting', label: 'Освещение', icon: 'metricLight' },
+  { id: 'maintenance', label: 'Т.О', icon: 'menuDevice' },
+]
+const HEATING_PRESET_OPTIONS = [
+  { id: 'pla', label: 'PLA', nozzle: 210, bed: 60 },
+  { id: 'abs', label: 'ABS', nozzle: 245, bed: 100 },
+  { id: 'petg', label: 'PETG', nozzle: 235, bed: 80 },
+] as const
+const FAN_PRESET_OPTIONS = [
+  { id: 'off', label: 'Откл.', value: 0 },
+  { id: 'low', label: 'Низкий', value: 25 },
+  { id: 'medium', label: 'Средний', value: 50 },
+  { id: 'high', label: 'Высокий', value: 75 },
+  { id: 'max', label: 'Макс.', value: 100 },
+] as const
 const SETTINGS_GROUP_OPTIONS: Array<SettingsMenuOption<SettingsGroupId>> = [
   { id: 'network', label: 'Сеть', icon: 'statusWifi' },
   { id: 'system', label: 'Система', icon: 'menuSettings' },
@@ -271,17 +326,17 @@ const SETTINGS_NOTIFICATION_HISTORY: SettingsNotificationItem[] = [
   {
     id: 'notif-003',
     title: 'Сервисное напоминание',
-    details: 'До планового ТО осталось 126 часов.',
+    details: 'До планового Т.О осталось 126 часов.',
     createdAt: '10:08',
   },
 ]
 const DEVICE_INFO_LINES = [
-  ['Модель', 'TreeD Shell Controller'],
-  ['Серийный номер', 'TRD-PI-240315-01'],
-  ['CPU', 'Raspberry Pi 4B (armv7l)'],
-  ['Память', '4 GB'],
-  ['MCU', 'STM32F446XX'],
-  ['Uptime', '2 д 7 ч 14 м'],
+  ['Модель', 'TreeD V2'],
+  ['Host', 'Rock Pi / Armbian Debian 12'],
+  ['Main MCU', 'Octopus Pro CAN'],
+  ['Toolhead MCU', 'EBB42 CAN'],
+  ['Probe', 'Eddy Duo CAN'],
+  ['Профиль', 'treed_v2_corexy_v1'],
 ] as const
 const CONSOLE_QUICK_COMMANDS = [
   'G28',
@@ -290,6 +345,14 @@ const CONSOLE_QUICK_COMMANDS = [
   'M140 S60',
   'START_PRINT',
 ] as const
+const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
+  connecting: 'Подключение',
+  online: 'Подключено',
+  degraded: 'Ограничено',
+  reconnecting: 'Переподключение',
+  offline: 'Офлайн',
+  shutdown: 'Klipper остановлен',
+}
 const SETTINGS_VIRTUAL_KEYBOARD_ROWS: string[][] = [
   ['Q', 'W', 'E', 'R', 'T', 'Y', 'U'],
   ['I', 'O', 'P', 'A', 'S', 'D', 'F'],
@@ -347,8 +410,6 @@ const HEAD_X_BOUNDS_MM = { min: 0, max: 250 } as const
 const HEAD_Y_BOUNDS_MM = { min: 0, max: 250 } as const
 const HEAD_Z_BOUNDS_MM = { min: 0, max: 200 } as const
 const Z_OFFSET_BOUNDS_MM = { min: -2, max: 2 } as const
-const MODEL_FAN_BOUNDS_PERCENT = { min: 0, max: 100 } as const
-const MODEL_FAN_STEP_PERCENT = 5
 const MAX_JOYSTICK_SPEED_MM_S = 50
 const BED_SCREW_MOVE_DURATION_MS = 650
 const BED_SCREW_GUIDE_POINTS: BedScrewPoint[] = [
@@ -361,8 +422,23 @@ const BED_SCREW_GUIDE_POINTS: BedScrewPoint[] = [
 const MAINTENANCE_STATUS = {
   runtimeHours: 874,
   hoursLeft: 126,
+  intervalHours: 1000,
 } as const
+const MAINTENANCE_HISTORY_ITEMS = [
+  { id: '3', date: '03.05.2024', runtimeHours: 748, label: 'Плановое ТО' },
+] as const
+const MAINTENANCE_CHECKLIST_ITEMS = [
+  { id: 'belts', label: 'Проверка натяжения ремней' },
+  { id: 'guides', label: 'Очистка направляющих и винтов' },
+  { id: 'axes', label: 'Смазка осей и подшипников' },
+  { id: 'fans', label: 'Проверка вентиляторов и обдува' },
+  { id: 'hotend', label: 'Осмотр сопла и хотэнда' },
+  { id: 'calibration', label: 'Калибровка стола (при необходимости)' },
+] as const
+const MAINTENANCE_PROGRESS_TICKS = Array.from({ length: 31 }, (_, index) => index)
+type MaintenanceChecklistItemId = (typeof MAINTENANCE_CHECKLIST_ITEMS)[number]['id']
 const IDLE_NOTES_DEFAULT_TEXT = [
+  'Экосистема TreeD V2.',
   'Перед запуском проверьте очистку стола и состояние поверхности.',
   'Если модель новая, сделайте короткий тест первого слоя.',
 ].join('\n')
@@ -372,15 +448,53 @@ const IDLE_NOTES_KEYBOARD_ROWS: string[][] = [
   ['Я', 'Ч', 'С', 'М', 'И', 'Т', 'Ь', 'Б', 'Ю'],
 ]
 
-function clampAxisValue(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
+function createMaintenanceChecklistState(checked: boolean): Record<MaintenanceChecklistItemId, boolean> {
+  return MAINTENANCE_CHECKLIST_ITEMS.reduce<Record<MaintenanceChecklistItemId, boolean>>((state, item) => {
+    state[item.id] = checked
+    return state
+  }, {} as Record<MaintenanceChecklistItemId, boolean>)
 }
 
-function snapValueByStep(value: number, min: number, max: number, step: number): number {
-  const safeStep = Math.max(1, step)
-  const clamped = clampAxisValue(value, min, max)
-  const steps = Math.round((clamped - min) / safeStep)
-  return clampAxisValue(min + (steps * safeStep), min, max)
+function MaintenanceLineIcon({ name }: { name: MaintenanceIconName }) {
+  if (name === 'runtime') {
+    return (
+      <svg className="control-maintenance-line-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="7.2" />
+        <path d="M12 7.9v4.5l3.1 2" />
+      </svg>
+    )
+  }
+
+  if (name === 'due') {
+    return (
+      <svg className="control-maintenance-line-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3.8 18.9 7.8v8.1L12 20 5.1 15.9V7.8L12 3.8Z" />
+        <circle cx="12" cy="10" r="2.1" />
+        <path d="M8.6 15.2c.8-1.6 1.9-2.4 3.4-2.4s2.6.8 3.4 2.4" />
+      </svg>
+    )
+  }
+
+  if (name === 'interval') {
+    return (
+      <svg className="control-maintenance-line-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M18.2 8.4A7 7 0 0 0 6 7.5" />
+        <path d="M18.2 4.7v3.7h-3.7" />
+        <path d="M5.8 15.6A7 7 0 0 0 18 16.5" />
+        <path d="M5.8 19.3v-3.7h3.7" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg className="control-maintenance-line-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M14.9 6.2a4.4 4.4 0 0 0-5.2 5.2L4.6 16.5a2.1 2.1 0 0 0 3 3l5.1-5.1a4.4 4.4 0 0 0 5.2-5.2l-3 3-2.1-2.1 3-3Z" />
+    </svg>
+  )
+}
+
+function clampAxisValue(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }
 
 function formatTuneKeyboardValue(value: number, fractionDigits: number): string {
@@ -398,6 +512,7 @@ function normalizeHeadPosition(position: PrintHeadPosition): PrintHeadPosition {
     x: clampAxisValue(position.x, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max),
     y: clampAxisValue(position.y, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max),
     z: clampAxisValue(position.z, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max),
+    e: position.e,
   }
 }
 
@@ -458,7 +573,6 @@ const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard' | 'files' | 'set
 
 function App() {
   const { snapshot, refresh } = usePrinterSnapshot()
-  const { pendingCommand, executeCommand } = usePrinterCommands()
   const screenShellRef = useRef<HTMLElement | null>(null)
   const topButtonRefs = useRef<Record<TopStatusButtonId, HTMLButtonElement | null>>({
     wifi: null,
@@ -468,7 +582,9 @@ function App() {
   })
   const [babystepStep, setBabystepStep] = useState<number>(BABYSTEP_STEP_OPTIONS[1])
   const [activeTopPopup, setActiveTopPopup] = useState<TopStatusButtonId | null>(null)
+  const [lastReadPrinterNotificationId, setLastReadPrinterNotificationId] = useState<string | null>(null)
   const [powerPopupNotice, setPowerPopupNotice] = useState<string>('')
+  const [armedPowerCommand, setArmedPowerCommand] = useState<PrinterCommandId | null>(null)
   const [topPopupPosition, setTopPopupPosition] = useState<TopPopupPosition | null>(null)
   const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
   const [filesSortKey, setFilesSortKey] = useState<FilesSortKey>('name')
@@ -476,12 +592,61 @@ function App() {
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
   const [activePrintFileName, setActivePrintFileName] = useState<string | null>(null)
   const [activePrintUiState, setActivePrintUiState] = useState<ActivePrintUiState | null>(null)
+  const commandRuntimeContext = useMemo(
+    () => ({
+      capabilities: snapshot.capabilities,
+      connection: snapshot.connection,
+      printJob: snapshot.source === 'live'
+        ? {
+            state: snapshot.printJob.state,
+            isActive: snapshot.printJob.isActive,
+            isPaused: snapshot.printJob.isPaused,
+          }
+        : {
+            state: activePrintUiState ??
+              (activePrintFileName === null ? snapshot.printJob.state : 'printing'),
+            isActive: activePrintFileName !== null,
+            isPaused: activePrintUiState === 'paused',
+          },
+      homedAxes: snapshot.homedAxes,
+      eddyStatus: snapshot.v2.eddy.status,
+    }),
+    [
+      activePrintFileName,
+      activePrintUiState,
+      snapshot.capabilities,
+      snapshot.connection,
+      snapshot.homedAxes,
+      snapshot.printJob.isActive,
+      snapshot.printJob.isPaused,
+      snapshot.printJob.state,
+      snapshot.source,
+      snapshot.v2.eddy.status,
+    ],
+  )
+  const {
+    pendingCommand,
+    error: commandError,
+    executeCommand,
+  } = usePrinterCommands(commandRuntimeContext)
+  const getCommandBlockReason = useCallback(
+    (command: PrinterCommandId, args?: ExecuteCommandArgs) => getTreeDCommandBlockReason(
+      command,
+      commandRuntimeContext,
+      args,
+    ),
+    [commandRuntimeContext],
+  )
+  const requiresCommandConfirmation = useCallback(
+    (command: PrinterCommandId) => getTreeDCommandCatalogItem(command).requiresConfirmation,
+    [],
+  )
   const [isPrintCancelConfirmOpen, setIsPrintCancelConfirmOpen] = useState<boolean>(false)
   const [activePrintTuneGroup, setActivePrintTuneGroup] = useState<PrintTuneGroupId | null>(null)
   const [printNozzleTargetTemp, setPrintNozzleTargetTemp] = useState<number>(DEFAULT_NOZZLE_TARGET_TEMP)
   const [printBedTargetTemp, setPrintBedTargetTemp] = useState<number>(DEFAULT_BED_TARGET_TEMP)
   const [printVolumetricFlowMm3S, setPrintVolumetricFlowMm3S] = useState<number>(DASHBOARD_VALUES.volumetricFlowMm3S)
-  const [printFanPercent, setPrintFanPercent] = useState<number>(rounded(snapshot.modelFanPercent))
+  const [printFanPercent, setPrintFanPercent] = useState<number>(Math.round(snapshot.modelFanPercent))
   const [printFlowPercent, setPrintFlowPercent] = useState<number>(DASHBOARD_VALUES.flowPercent)
   const [printSpeedMmS, setPrintSpeedMmS] = useState<number>(DASHBOARD_VALUES.speedMmS)
   const [printAccelMmS2, setPrintAccelMmS2] = useState<number>(DASHBOARD_VALUES.accelMmS2)
@@ -538,20 +703,28 @@ function App() {
   const [wifiPasswordValue, setWifiPasswordValue] = useState<string>('')
   const [isWifiPasswordVisible, setIsWifiPasswordVisible] = useState<boolean>(false)
   const [wifiConnectionNotice, setWifiConnectionNotice] = useState<string>('')
-  const [parkingMode, setParkingMode] = useState<ParkingMode>('all')
+  const [, setParkingMode] = useState<ParkingMode>('all')
   const [parkingAxis, setParkingAxis] = useState<AxisId>('X')
   const [movementMode, setMovementMode] = useState<MovementMode>('buttons')
   const [moveStepKey, setMoveStepKey] = useState<MoveStepKey>('1')
-  const [isServiceModeEnabled, setIsServiceModeEnabled] = useState<boolean>(false)
-  const [modelFanPercent, setModelFanPercent] = useState<number>(() => (
-    snapValueByStep(snapshot.modelFanPercent, MODEL_FAN_BOUNDS_PERCENT.min, MODEL_FAN_BOUNDS_PERCENT.max, MODEL_FAN_STEP_PERCENT)
-  ))
+  const [activeControlGroup, setActiveControlGroup] = useState<ControlGroupId>('movement')
+  const [isControlMenuCompact, setIsControlMenuCompact] = useState<boolean>(false)
+  const [activeControlFlashKey, setActiveControlFlashKey] = useState<string | null>(null)
+  const [idleWidgetOrder, setIdleWidgetOrder] = useState<IdleWidgetId[]>(['temperature', 'maintenance'])
+  const [armedIdleWidgetId, setArmedIdleWidgetId] = useState<IdleWidgetId | null>(null)
+  const [draggingIdleWidgetId, setDraggingIdleWidgetId] = useState<IdleWidgetId | null>(null)
+  const [isMainLightEnabled, setIsMainLightEnabled] = useState<boolean>(false)
+  const [isToolheadLightEnabled, setIsToolheadLightEnabled] = useState<boolean>(false)
+  const [maintenanceChecklistState, setMaintenanceChecklistState] = useState<Record<MaintenanceChecklistItemId, boolean>>(() =>
+    createMaintenanceChecklistState(false),
+  )
   const [joystickVector, setJoystickVector] = useState<JoystickVector>({ x: 0, y: 0 })
   const [printHeadPosition, setPrintHeadPosition] = useState<PrintHeadPosition>(() =>
     normalizeHeadPosition({
       x: snapshot.toolheadX,
       y: snapshot.toolheadY,
       z: snapshot.toolheadZ,
+      e: 0,
     }),
   )
   const idleNotesInputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -559,10 +732,28 @@ function App() {
   const wifiPasswordInputRef = useRef<HTMLInputElement | null>(null)
   const consoleInputRef = useRef<HTMLTextAreaElement | null>(null)
   const bedScrewMoveTimeoutRef = useRef<number | null>(null)
+  const controlFlashTimeoutRef = useRef<number | null>(null)
+  const idleWidgetHoldTimeoutRef = useRef<number | null>(null)
+  const idleWidgetRefs = useRef<Record<IdleWidgetId, HTMLElement | null>>({
+    temperature: null,
+    maintenance: null,
+  })
+  const draggingIdleWidgetIdRef = useRef<IdleWidgetId | null>(null)
 
-  const printFill = Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
+  const displayPrintFileName = snapshot.source === 'live' && snapshot.printJob.isActive
+    ? snapshot.printJob.filename
+    : activePrintFileName
+  const printFill = snapshot.source === 'live'
+    ? Math.round(clampAxisValue(snapshot.printJob.progress * 100, 0, 100))
+    : Math.max(0, Math.min(100, DASHBOARD_VALUES.progressPercent))
+  const displayLayerCurrent = snapshot.source === 'live'
+    ? (snapshot.printJob.currentLayer ?? DASHBOARD_VALUES.layerCurrent)
+    : DASHBOARD_VALUES.layerCurrent
+  const displayLayerTotal = snapshot.source === 'live'
+    ? (snapshot.printJob.totalLayer ?? DASHBOARD_VALUES.layerTotal)
+    : DASHBOARD_VALUES.layerTotal
   const isBusy = pendingCommand !== null
-  const hasActivePrint = activePrintFileName !== null
+  const hasActivePrint = displayPrintFileName !== null
   const activePrintTuneMeta = activePrintTuneGroup === null ? null : PRINT_TUNE_GROUP_META[activePrintTuneGroup]
   const isTemperatureTuneGroup = activePrintTuneGroup === 'nozzle' || activePrintTuneGroup === 'bed'
   const isCompactTuneKeyboardOpen = !isTemperatureTuneGroup && printTuneKeyboardTarget !== null
@@ -575,6 +766,10 @@ function App() {
     0,
     BABYSTEP_STEP_OPTIONS.findIndex((step) => step === babystepStep),
   )
+  const activeControlGroupOption =
+    CONTROL_GROUP_OPTIONS.find((option) => option.id === activeControlGroup) ?? CONTROL_GROUP_OPTIONS[0]
+  const maintenanceProgressPercent = clampPercent(MAINTENANCE_STATUS.runtimeHours, MAINTENANCE_STATUS.intervalHours)
+  const isMaintenanceChecklistComplete = MAINTENANCE_CHECKLIST_ITEMS.every((item) => maintenanceChecklistState[item.id])
   const formattedSnapshotTime = useMemo(() => {
     const parsed = new Date(snapshot.updatedAt)
     if (Number.isNaN(parsed.getTime())) {
@@ -582,23 +777,61 @@ function App() {
     }
     return parsed.toLocaleTimeString('ru-RU')
   }, [snapshot.updatedAt])
-  const connectionLabel = snapshot.connection === 'online' ? 'Подключено' : 'Офлайн'
-  const wifiSsidLabel = snapshot.connection === 'online' ? snapshot.wifiSsid : 'Не подключено'
-  const wifiIpLabel = snapshot.connection === 'online' ? snapshot.ipAddress : '—'
-  const cloudStatusLabel = snapshot.connection === 'online' ? 'В сети' : 'Не в сети'
-  const idleNozzleTempLabel = `${rounded(snapshot.extruderTemp)} °C`
-  const idleBedTempLabel = `${rounded(snapshot.bedTemp)} °C`
-  const effectiveActivePrintState = hasActivePrint ? (activePrintUiState ?? snapshot.state) : snapshot.state
+  const isRuntimeCurrent = snapshot.connection === 'online' || snapshot.connection === 'degraded'
+  const connectionLabel = CONNECTION_LABELS[snapshot.connection]
+  const wifiSsidLabel = isRuntimeCurrent ? snapshot.wifiSsid : 'Не подключено'
+  const wifiIpLabel = isRuntimeCurrent ? snapshot.ipAddress : '—'
+  const isNetworkCapabilityAvailable = snapshot.capabilities.network
+  const isCloudCapabilityAvailable = snapshot.capabilities.cloud
+  const isUpdatesCapabilityAvailable = snapshot.capabilities.updates
+  const powerMenuActions = POWER_MENU_ACTIONS.map((action) => ({
+    ...action,
+    blockReason: getCommandBlockReason(action.command),
+  }))
+  const networkCapabilityNotice = isNetworkCapabilityAvailable
+    ? 'Выберите сеть и выполните подключение.'
+    : 'Недоступно: Moonraker/V2 Wi-Fi capability не подтвержден.'
+  const cloudStatusLabel = isCloudCapabilityAvailable && snapshot.connection === 'online' ? 'В сети' : 'Недоступно'
+  const cloudCapabilityNotice = isCloudCapabilityAvailable
+    ? cloudConnectionNotice
+    : 'Недоступно: Moonraker/V2 cloud capability не подтвержден.'
+  const updateCapabilityNotice = isUpdatesCapabilityAvailable
+    ? updateNotice
+    : 'Недоступно: Moonraker/V2 update capability не подтвержден.'
+  const dashboardTemperatureTargets = useMemo(
+    () => ({
+      nozzle: printNozzleTargetTemp,
+      bed: printBedTargetTemp,
+    }),
+    [printBedTargetTemp, printNozzleTargetTemp],
+  )
+  const eddyStatusLabel = snapshot.v2.eddy.status === 'ready'
+    ? 'Eddy готов к Z-home/mesh'
+    : snapshot.v2.eddy.status === 'uncalibrated'
+      ? 'Eddy не калиброван'
+    : snapshot.v2.eddy.status === 'requires_xy_home'
+      ? 'Eddy требует homing XY'
+      : 'Eddy статус неизвестен'
+  const effectiveActivePrintState = snapshot.source === 'live'
+    ? snapshot.printJob.state
+    : hasActivePrint
+      ? (activePrintUiState ?? snapshot.state)
+      : snapshot.state
   const isPrintPaused = hasActivePrint && statusLabel(effectiveActivePrintState) === 'Пауза'
-  const topBarScreenLabel = useMemo(() => {
-    if (activeScreen === 'dashboard') {
-      return hasActivePrint ? statusLabel(effectiveActivePrintState) : 'Ожидание печати'
-    }
-
-    return BOTTOM_NAV_ITEMS.find((item) => item.id === activeScreen)?.label ?? statusLabel(snapshot.state)
-  }, [activeScreen, effectiveActivePrintState, hasActivePrint, snapshot.state])
+  const printerDisplayStatus = usePrinterDisplayStatus()
+  const currentPrinterNotification = printerDisplayStatus.notification
+  const currentPrinterNotificationId = currentPrinterNotification?.id ?? null
+  const hasUnreadPrinterNotification =
+    currentPrinterNotificationId !== null &&
+    currentPrinterNotificationId !== lastReadPrinterNotificationId
+  const printPauseCommand = isPrintPaused ? 'resume' : 'pause'
+  const printPauseBlockReason = getCommandBlockReason(printPauseCommand)
+  const printCancelBlockReason = getCommandBlockReason('cancel')
+  const printStartBlockReason = getCommandBlockReason('start')
+  const idleHeroStatusLabel = printerDisplayStatus.label
+  const effectiveFilesLibrary = snapshot.source === 'live' ? snapshot.printFiles : filesLibrary
   const sortedPrintFiles = useMemo(() => {
-    const nextItems = [...filesLibrary]
+    const nextItems = [...effectiveFilesLibrary]
 
     if (filesSortKey === 'addedAt') {
       nextItems.sort((left, right) => Date.parse(right.addedAt) - Date.parse(left.addedAt))
@@ -607,14 +840,14 @@ function App() {
 
     nextItems.sort((left, right) => left.name.localeCompare(right.name, 'en'))
     return nextItems
-  }, [filesLibrary, filesSortKey])
+  }, [effectiveFilesLibrary, filesSortKey])
   const selectedPrintFile = useMemo(() => {
     if (selectedFileId === null) {
       return null
     }
 
-    return filesLibrary.find((item) => item.id === selectedFileId) ?? null
-  }, [filesLibrary, selectedFileId])
+    return effectiveFilesLibrary.find((item) => item.id === selectedFileId) ?? null
+  }, [effectiveFilesLibrary, selectedFileId])
   const selectedWifiNetwork = useMemo(() => {
     if (selectedWifiNetworkId === null) {
       return null
@@ -647,8 +880,22 @@ function App() {
     () => Math.hypot(joystickVector.x, joystickVector.y) * MAX_JOYSTICK_SPEED_MM_S,
     [joystickVector.x, joystickVector.y],
   )
-  const axisCoordinatesLabel = `X ${formatAxisCoordinate(printHeadPosition.x)}  Y ${formatAxisCoordinate(printHeadPosition.y)}  Z ${formatAxisCoordinate(printHeadPosition.z)}`
+  const axisCoordinatesLabel = `X ${formatAxisCoordinate(printHeadPosition.x)}  Y ${formatAxisCoordinate(printHeadPosition.y)}  Z ${formatAxisCoordinate(printHeadPosition.z)}  E ${formatAxisCoordinate(printHeadPosition.e)}`
+  const axisCoordinateItems = [
+    { axis: 'X', value: formatAxisCoordinate(printHeadPosition.x) },
+    { axis: 'Y', value: formatAxisCoordinate(printHeadPosition.y) },
+    { axis: 'Z', value: formatAxisCoordinate(printHeadPosition.z) },
+    { axis: 'E', value: formatAxisCoordinate(printHeadPosition.e) },
+  ]
+  const homedAxes = snapshot.homedAxes.toLocaleLowerCase('en-US')
+  const axisHomeStatuses = HOMED_AXIS_IDS.map((axis) => ({
+    axis,
+    homed: homedAxes.includes(axis.toLocaleLowerCase('en-US')),
+  }))
   const activeBedScrewPoint = BED_SCREW_GUIDE_POINTS.find((point) => point.id === activeBedScrewPointId) ?? null
+  const activeBedScrewPointLabel = activeBedScrewPoint === null
+    ? 'Текущая точка не выбрана.'
+    : `Текущая: ${activeBedScrewPoint.label} | X ${formatAxisCoordinate(activeBedScrewPoint.xMm)} | Y ${formatAxisCoordinate(activeBedScrewPoint.yMm)}`
   const bedScrewGuideProgressLabel = `${visitedBedScrewPointIds.length} / ${BED_SCREW_GUIDE_POINTS.length}`
   const isBedScrewGuideDone = visitedBedScrewPointIds.length === BED_SCREW_GUIDE_POINTS.length
   const isManualBedControlsLocked = isBedScrewPointMoving || isBusy
@@ -682,26 +929,17 @@ function App() {
     ? 'settings-wifi-search-keyboard-preview'
     : keyboardPreviewTestId
 
-  const temperatureValueByKey = {
-    nozzle: snapshot.extruderTemp,
-    bed: snapshot.bedTemp,
-  } as const
-  const temperatureTargetByKey = {
-    nozzle: printNozzleTargetTemp,
-    bed: printBedTargetTemp,
-  } as const
+  useEffect(() => {
+    return () => {
+      if (controlFlashTimeoutRef.current !== null) {
+        window.clearTimeout(controlFlashTimeoutRef.current)
+      }
 
-  const temperatureMetrics = TEMPERATURE_METRIC_DEFINITIONS.map((definition) => {
-    const currentValue = temperatureValueByKey[definition.key]
-    const targetValue = temperatureTargetByKey[definition.key]
-
-    return {
-      ...definition,
-      target: targetValue,
-      current: rounded(currentValue),
-      fillPercent: clampPercent(currentValue, targetValue),
+      if (idleWidgetHoldTimeoutRef.current !== null) {
+        window.clearTimeout(idleWidgetHoldTimeoutRef.current)
+      }
     }
-  })
+  }, [])
 
   const quickMetricValueByKey = {
     volumetricFlow: printVolumetricFlowMm3S,
@@ -747,6 +985,49 @@ function App() {
     }),
     [printBedTargetTemp, snapshot.bedTemp],
   )
+  const temperatureChartSeries = useMemo(
+    () => [
+      {
+        id: 'nozzle' as const,
+        label: 'Сопло',
+        tone: 'orange' as const,
+        values: nozzleTrendValues,
+        target: printNozzleTargetTemp,
+      },
+      {
+        id: 'bed' as const,
+        label: 'Стол',
+        tone: 'green' as const,
+        values: bedTrendValues,
+        target: printBedTargetTemp,
+      },
+    ],
+    [bedTrendValues, nozzleTrendValues, printBedTargetTemp, printNozzleTargetTemp],
+  )
+  const heatingControlRows = [
+    {
+      id: 'nozzle' as const,
+      keyboardTarget: 'nozzle' as const,
+      icon: 'metricNozzle' as const,
+      uiLabel: 'Сопло',
+      tone: 'orange' as const,
+      current: snapshot.extruderTemp,
+      target: printNozzleTargetTemp,
+      onTargetChange: setPrintNozzleTargetTemp,
+      testIdPrefix: 'control-heating-nozzle',
+    },
+    {
+      id: 'bed' as const,
+      keyboardTarget: 'bed' as const,
+      icon: 'metricBed' as const,
+      uiLabel: 'Стол',
+      tone: 'green' as const,
+      current: snapshot.bedTemp,
+      target: printBedTargetTemp,
+      onTargetChange: setPrintBedTargetTemp,
+      testIdPrefix: 'control-heating-bed',
+    },
+  ]
 
   const closeTopPopup = useCallback(() => {
     setActiveTopPopup(null)
@@ -765,6 +1046,10 @@ function App() {
       shellRect && anchorRect && shellRect.width > 0 && anchorRect.width > 0
         ? anchorRect.left - shellRect.left + (anchorRect.width / 2)
         : resolveFallbackAnchorCenterX(id, shellWidth)
+    const anchorBottomY =
+      shellRect && anchorRect && shellRect.height > 0 && anchorRect.height > 0
+        ? anchorRect.bottom - shellRect.top
+        : 0
 
     let left = anchorCenterX - (popupWidth / 2)
     left = Math.max(TOP_POPUP_SIDE_PADDING, Math.min(left, shellWidth - popupWidth - TOP_POPUP_SIDE_PADDING))
@@ -775,7 +1060,7 @@ function App() {
     )
 
     return {
-      top: TOP_POPUP_GAP,
+      top: Math.max(TOP_POPUP_GAP, anchorBottomY + TOP_POPUP_GAP),
       left,
       arrowLeft,
     }
@@ -788,11 +1073,16 @@ function App() {
         return
       }
       setPowerPopupNotice('')
+      setArmedPowerCommand(null)
       setTopPopupPosition(resolveTopPopupPosition(id))
       setActiveTopPopup(id)
     },
     [activeTopPopup, closeTopPopup, resolveTopPopupPosition],
   )
+
+  const setTopButtonRef = useCallback((id: TopStatusButtonId, node: HTMLButtonElement | null): void => {
+    topButtonRefs.current[id] = node
+  }, [])
 
   const openWifiSettings = useCallback(() => {
     setActiveSettingsGroup('network')
@@ -800,20 +1090,109 @@ function App() {
     closeTopPopup()
   }, [closeTopPopup])
 
+  function clearIdleWidgetHoldTimeout(): void {
+    if (idleWidgetHoldTimeoutRef.current === null) {
+      return
+    }
+
+    window.clearTimeout(idleWidgetHoldTimeoutRef.current)
+    idleWidgetHoldTimeoutRef.current = null
+  }
+
+  function openIdleWidgetTarget(widgetId: IdleWidgetId): void {
+    setActiveControlGroup(widgetId === 'temperature' ? 'heating' : 'maintenance')
+    setActiveScreen('control')
+    closeTopPopup()
+  }
+
+  function moveIdleWidgetByPointer(widgetId: IdleWidgetId, pointerX: number): void {
+    const temperatureRect = idleWidgetRefs.current.temperature?.getBoundingClientRect()
+    const maintenanceRect = idleWidgetRefs.current.maintenance?.getBoundingClientRect()
+
+    if (temperatureRect === undefined || maintenanceRect === undefined) {
+      return
+    }
+
+    const leftEdge = Math.min(temperatureRect.left, maintenanceRect.left)
+    const rightEdge = Math.max(temperatureRect.right, maintenanceRect.right)
+    const targetIndex = pointerX < leftEdge + ((rightEdge - leftEdge) / 2) ? 0 : 1
+
+    setIdleWidgetOrder((currentOrder) => {
+      const currentIndex = currentOrder.indexOf(widgetId)
+
+      if (currentIndex === targetIndex) {
+        return currentOrder
+      }
+
+      const otherWidgetId = currentOrder.find((currentWidgetId) => currentWidgetId !== widgetId)
+      if (otherWidgetId === undefined) {
+        return currentOrder
+      }
+
+      return targetIndex === 0 ? [widgetId, otherWidgetId] : [otherWidgetId, widgetId]
+    })
+  }
+
+  function handleIdleWidgetDragPointerDown(event: PointerEvent<HTMLButtonElement>, widgetId: IdleWidgetId): void {
+    event.preventDefault()
+    event.stopPropagation()
+
+    clearIdleWidgetHoldTimeout()
+    setArmedIdleWidgetId(widgetId)
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    idleWidgetHoldTimeoutRef.current = window.setTimeout(() => {
+      draggingIdleWidgetIdRef.current = widgetId
+      setArmedIdleWidgetId(null)
+      setDraggingIdleWidgetId(widgetId)
+      idleWidgetHoldTimeoutRef.current = null
+    }, IDLE_WIDGET_DRAG_HOLD_MS)
+  }
+
+  function handleIdleWidgetDragPointerMove(event: PointerEvent<HTMLButtonElement>, widgetId: IdleWidgetId): void {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (draggingIdleWidgetIdRef.current !== widgetId) {
+      return
+    }
+
+    moveIdleWidgetByPointer(widgetId, event.clientX)
+  }
+
+  function handleIdleWidgetDragPointerEnd(event: PointerEvent<HTMLButtonElement>): void {
+    event.preventDefault()
+    event.stopPropagation()
+
+    clearIdleWidgetHoldTimeout()
+    setArmedIdleWidgetId(null)
+    setDraggingIdleWidgetId(null)
+    draggingIdleWidgetIdRef.current = null
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  function handleIdleWidgetDragHandleClick(event: MouseEvent<HTMLButtonElement>): void {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  function handleScreenSelect(nextScreen: ScreenId): void {
+    if (nextScreen !== 'dashboard') {
+      closeTopPopup()
+    }
+
+    setActiveScreen(nextScreen)
+  }
+
   function handleFilesSortChange(nextSortKey: FilesSortKey): void {
     if (nextSortKey === filesSortKey) {
       return
     }
 
     setFilesSortKey(nextSortKey)
-  }
-
-  function handleParkingModeChange(nextMode: ParkingMode): void {
-    setParkingMode(nextMode)
-  }
-
-  function handleParkingAxisChange(nextAxis: AxisId): void {
-    setParkingAxis(nextAxis)
   }
 
   function handleMoveStepChange(nextStep: MoveStepKey): void {
@@ -824,10 +1203,8 @@ function App() {
     setMovementMode(nextMode)
   }
 
-  function handleModelFanPercentChange(nextValue: number): void {
-    setModelFanPercent(
-      snapValueByStep(nextValue, MODEL_FAN_BOUNDS_PERCENT.min, MODEL_FAN_BOUNDS_PERCENT.max, MODEL_FAN_STEP_PERCENT),
-    )
+  function handleControlMenuCompactToggle(): void {
+    setIsControlMenuCompact((currentState) => !currentState)
   }
 
   function handleMacroZOffsetAdjust(direction: -1 | 1): void {
@@ -874,7 +1251,7 @@ function App() {
     clearBedScrewMoveTimeout()
     setIsBedScrewPointMoving(true)
     setActiveBedScrewPointId(selectedPoint.id)
-    setBedScrewGuideNotice(`РџРµСЂРµРјРµС‰РµРЅРёРµ Рє С‚РѕС‡РєРµ ${selectedPointIndex + 1}...`)
+    setBedScrewGuideNotice(`Перемещение к точке ${selectedPointIndex + 1}...`)
     setPrintHeadPosition((currentPosition) => ({
       ...currentPosition,
       x: clampAxisValue(selectedPoint.xMm, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max),
@@ -964,36 +1341,6 @@ function App() {
         ...currentPosition,
         z: 0,
       }
-    })
-  }
-
-  function handleBedScrewPointPick(pointId: BedScrewPointId): void {
-    if (!isBedScrewGuideStarted || isManualBedControlsLocked) {
-      return
-    }
-
-    const selectedPointIndex = BED_SCREW_GUIDE_POINTS.findIndex((point) => point.id === pointId)
-    const selectedPoint = BED_SCREW_GUIDE_POINTS[selectedPointIndex]
-    if (selectedPoint === undefined) {
-      return
-    }
-
-    setActiveBedScrewPointId(selectedPoint.id)
-    setPrintHeadPosition((currentPosition) => ({
-      ...currentPosition,
-      x: clampAxisValue(selectedPoint.xMm, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max),
-      y: clampAxisValue(selectedPoint.yMm, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max),
-    }))
-    setVisitedBedScrewPointIds((currentPoints) => {
-      const nextPoints = currentPoints.includes(selectedPoint.id)
-        ? currentPoints
-        : [...currentPoints, selectedPoint.id]
-      if (nextPoints.length === BED_SCREW_GUIDE_POINTS.length) {
-        setBedScrewGuideNotice('Все точки пройдены. Нажмите «Завершить», чтобы перейти к Z-offset.')
-      } else {
-        setBedScrewGuideNotice(`Точка ${nextPoints.length} выбрана. Продолжайте проход по карте.`)
-      }
-      return nextPoints
     })
   }
 
@@ -1132,11 +1479,13 @@ function App() {
       return
     }
 
-    if (activePrintFileName === selectedPrintFile.name) {
+    if (displayPrintFileName === selectedPrintFile.name) {
       setActivePrintFileName(null)
       setActivePrintUiState(null)
     }
-    setFilesLibrary((currentItems) => currentItems.filter((item) => item.id !== selectedPrintFile.id))
+    if (snapshot.source !== 'live') {
+      setFilesLibrary((currentItems) => currentItems.filter((item) => item.id !== selectedPrintFile.id))
+    }
     closeFileModal()
   }
 
@@ -1158,23 +1507,32 @@ function App() {
     }
   }
 
-  async function handleParkingCommand(): Promise<void> {
-    const ok = await executeCommand({ command: 'home' })
+  async function handleParkingTargetSelect(nextMode: ParkingMode, nextAxis?: AxisId): Promise<void> {
+    const resolvedAxis = nextMode === 'axis' ? (nextAxis ?? parkingAxis) : parkingAxis
+
+    setParkingMode(nextMode)
+    if (nextMode === 'axis') {
+      setParkingAxis(resolvedAxis)
+    }
+    flashControlAction(nextMode === 'all' ? 'parking-all' : `parking-${resolvedAxis}`)
+
+    const command = nextMode === 'all' ? 'homeAll' : resolvedAxis === 'Z' ? 'homeZ' : 'homeXY'
+    const ok = await executeCommand({ command })
     if (!ok) {
       return
     }
 
     await refresh()
     setPrintHeadPosition((prevPosition) => {
-      if (parkingMode === 'all') {
+      if (nextMode === 'all') {
         return { ...prevPosition, x: 0, y: 0, z: 0 }
       }
 
-      if (parkingAxis === 'X') {
+      if (resolvedAxis === 'X') {
         return { ...prevPosition, x: 0 }
       }
 
-      if (parkingAxis === 'Y') {
+      if (resolvedAxis === 'Y') {
         return { ...prevPosition, y: 0 }
       }
 
@@ -1183,25 +1541,53 @@ function App() {
   }
 
   function handleServiceModeToggle(): void {
-    setIsServiceModeEnabled((prevValue) => !prevValue)
+    flashControlAction('service-mode')
   }
 
   function handleAxisMove(axis: AxisId, direction: -1 | 1): void {
-    setPrintHeadPosition((prevPosition) => {
-      const delta = direction * moveStepMm
-      return {
-        ...prevPosition,
-        x: axis === 'X'
-          ? clampAxisValue(prevPosition.x + delta, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max)
-          : prevPosition.x,
-        y: axis === 'Y'
-          ? clampAxisValue(prevPosition.y + delta, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max)
-          : prevPosition.y,
-        z: axis === 'Z'
-          ? clampAxisValue(prevPosition.z + delta, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max)
-          : prevPosition.z,
+    const distanceMm = direction * moveStepMm
+    void executeCommand({ command: 'moveAxis', axis, distanceMm }).then((ok) => {
+      if (!ok) {
+        return
       }
+
+      setPrintHeadPosition((prevPosition) => {
+        return {
+          ...prevPosition,
+          x: axis === 'X'
+            ? clampAxisValue(prevPosition.x + distanceMm, HEAD_X_BOUNDS_MM.min, HEAD_X_BOUNDS_MM.max)
+            : prevPosition.x,
+          y: axis === 'Y'
+            ? clampAxisValue(prevPosition.y + distanceMm, HEAD_Y_BOUNDS_MM.min, HEAD_Y_BOUNDS_MM.max)
+            : prevPosition.y,
+          z: axis === 'Z'
+            ? clampAxisValue(prevPosition.z + distanceMm, HEAD_Z_BOUNDS_MM.min, HEAD_Z_BOUNDS_MM.max)
+            : prevPosition.z,
+        }
+      })
     })
+  }
+
+  function handleFilamentMove(direction: -1 | 1): void {
+    setPrintHeadPosition((prevPosition) => ({
+      ...prevPosition,
+      e: prevPosition.e - (direction * moveStepMm),
+    }))
+
+    void executeCommand({ command: direction > 0 ? 'unloadFilament' : 'loadFilament' })
+  }
+
+  function flashControlAction(nextKey: string): void {
+    setActiveControlFlashKey(nextKey)
+
+    if (controlFlashTimeoutRef.current !== null) {
+      window.clearTimeout(controlFlashTimeoutRef.current)
+    }
+
+    controlFlashTimeoutRef.current = window.setTimeout(() => {
+      setActiveControlFlashKey((currentKey) => (currentKey === nextKey ? null : currentKey))
+      controlFlashTimeoutRef.current = null
+    }, 1000)
   }
 
   function handleJoystickVectorChange(nextVector: JoystickVector): void {
@@ -1216,7 +1602,7 @@ function App() {
   }
 
   function handleMotorsDisable(): void {
-    // Команда отключения моторов будет подключена после интеграции backend.
+    void executeCommand({ command: 'consoleGcode', gcode: 'M84' })
   }
 
   function handleWifiSearchQueryChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -1427,7 +1813,7 @@ function App() {
     }
     setKeyboardCaret(activeKeyboardTarget, nextCaret)
   }, [activeKeyboardTarget, consoleCommandValue, idleNotesText, setKeyboardCaret, wifiPasswordValue, wifiSearchQuery])
-  const isIdleNotesKeyboardOpen = false
+  const isIdleNotesKeyboardOpen = activeKeyboardTarget === 'idleNotes'
   const handleIdleNotesKeyboardClose = handleKeyboardClose
   const handleIdleNotesKeyMouseDown = handleVirtualKeyboardKeyMouseDown
   const handleIdleNotesVirtualKey = handleVirtualKeyboardKey
@@ -1436,6 +1822,12 @@ function App() {
   const handleSettingsVirtualKey = handleVirtualKeyboardKey
 
   function handleConsoleSubmit(): void {
+    const consoleBlockReason = getCommandBlockReason('consoleGcode')
+    if (consoleBlockReason !== null) {
+      setConsoleNotice(consoleBlockReason)
+      return
+    }
+
     const trimmed = consoleCommandValue.trim()
     if (trimmed.length === 0) {
       setConsoleNotice('Введите команду перед отправкой.')
@@ -1453,7 +1845,30 @@ function App() {
     ])
     setConsoleNotice(`Команда отправлена: ${trimmed}`)
     setConsoleCommandValue('')
+    void executeCommand({ command: 'consoleGcode', gcode: trimmed }).then((ok) => {
+      if (!ok) {
+        setConsoleNotice(`Команда не выполнена: ${trimmed}`)
+      }
+    })
   }
+
+  useEffect(() => {
+    if (activeScreen !== 'dashboard' && activeTopPopup !== null) {
+      closeTopPopup()
+    }
+  }, [activeScreen, activeTopPopup, closeTopPopup])
+
+  useEffect(() => {
+    if (activeTopPopup === 'notifications' && currentPrinterNotificationId !== null) {
+      setLastReadPrinterNotificationId(currentPrinterNotificationId)
+    }
+  }, [activeTopPopup, currentPrinterNotificationId])
+
+  useEffect(() => {
+    if (currentPrinterNotificationId === null && lastReadPrinterNotificationId !== null) {
+      setLastReadPrinterNotificationId(null)
+    }
+  }, [currentPrinterNotificationId, lastReadPrinterNotificationId])
 
   useEffect(() => {
     if (activeTopPopup === null || typeof window === 'undefined') {
@@ -1578,31 +1993,17 @@ function App() {
   }, [joystickVector.x, joystickVector.y, movementMode])
 
   useEffect(() => {
-    setModelFanPercent((currentValue) => {
-      const nextValue = snapValueByStep(
-        snapshot.modelFanPercent,
-        MODEL_FAN_BOUNDS_PERCENT.min,
-        MODEL_FAN_BOUNDS_PERCENT.max,
-        MODEL_FAN_STEP_PERCENT,
-      )
-
-      return currentValue === nextValue ? currentValue : nextValue
-    })
-  }, [snapshot.modelFanPercent])
-
-  useEffect(() => {
     if (movementMode === 'joystick') {
       return
     }
 
-    setPrintHeadPosition(
-      normalizeHeadPosition({
-        x: snapshot.toolheadX,
-        y: snapshot.toolheadY,
-        z: snapshot.toolheadZ,
-      }),
-    )
-  }, [movementMode, snapshot.toolheadX, snapshot.toolheadY, snapshot.toolheadZ])
+    setPrintHeadPosition(normalizeHeadPosition({
+      x: snapshot.toolhead.rawX,
+      y: snapshot.toolhead.rawY,
+      z: snapshot.toolhead.rawZ,
+      e: snapshot.toolhead.rawE,
+    }))
+  }, [movementMode, snapshot.toolhead.rawX, snapshot.toolhead.rawY, snapshot.toolhead.rawZ, snapshot.toolhead.rawE])
 
   useEffect(() => {
     if (movementMode !== 'joystick' || (joystickVector.x === 0 && joystickVector.y === 0)) {
@@ -1623,6 +2024,7 @@ function App() {
         x: prevPosition.x + (joystickVector.x * MAX_JOYSTICK_SPEED_MM_S * deltaSeconds),
         y: prevPosition.y + (joystickVector.y * MAX_JOYSTICK_SPEED_MM_S * deltaSeconds),
         z: prevPosition.z,
+        e: prevPosition.e,
       }))
 
       frameHandle = window.requestAnimationFrame(tick)
@@ -1636,16 +2038,32 @@ function App() {
     }
   }, [joystickVector.x, joystickVector.y, movementMode])
 
-  function setTopButtonRef(id: TopStatusButtonId, node: HTMLButtonElement | null): void {
-    topButtonRefs.current[id] = node
-  }
+  async function handlePowerMenuAction(command: (typeof POWER_MENU_ACTIONS)[number]['command']): Promise<void> {
+    const action = POWER_MENU_ACTIONS.find((item) => item.command === command)
+    const blockReason = getCommandBlockReason(command)
 
-  function handlePowerShutdownPlaceholder(): void {
-    setPowerPopupNotice('Команда выключения пока не подключена к backend.')
+    if (blockReason !== null) {
+      setPowerPopupNotice(blockReason)
+      setArmedPowerCommand(null)
+      return
+    }
+
+    if (requiresCommandConfirmation(command) && armedPowerCommand !== command) {
+      setArmedPowerCommand(command)
+      setPowerPopupNotice(`Подтвердите действие повторным нажатием: ${action?.label ?? command}.`)
+      return
+    }
+
+    const ok = await executeCommand({ command })
+    setArmedPowerCommand(null)
+    if (ok) {
+      setPowerPopupNotice(`Команда отправлена: ${action?.label ?? command}.`)
+      void refresh()
+    }
   }
 
   async function handlePause(): Promise<void> {
-    const nextCommand = isPrintPaused ? 'resume' : 'pause'
+    const nextCommand = printPauseCommand
     const ok = await executeCommand({ command: nextCommand })
     if (ok) {
       setActivePrintUiState(isPrintPaused ? 'printing' : 'paused')
@@ -1654,7 +2072,16 @@ function App() {
   }
 
   function handleStopRequest(): void {
-    setIsPrintCancelConfirmOpen(true)
+    if (printCancelBlockReason !== null) {
+      return
+    }
+
+    if (requiresCommandConfirmation('cancel')) {
+      setIsPrintCancelConfirmOpen(true)
+      return
+    }
+
+    void handleStopConfirm()
   }
 
   async function handleStopConfirm(): Promise<void> {
@@ -1668,7 +2095,7 @@ function App() {
     }
   }
 
-  function handlePrintTuneGroupOpen(groupId: PrintTuneGroupId): void {
+  const handlePrintTuneGroupOpen = useCallback((groupId: PrintTuneGroupId): void => {
     if (groupId === 'nozzle') {
       setTemperatureChartMode('nozzle')
     } else if (groupId === 'bed') {
@@ -1678,7 +2105,7 @@ function App() {
     }
 
     setActivePrintTuneGroup(groupId)
-  }
+  }, [])
 
   function handlePrintTuneGroupClose(): void {
     setActivePrintTuneGroup(null)
@@ -1738,7 +2165,89 @@ function App() {
 
     const normalized = Math.round(clampAxisValue(parsed, 0, 300))
     setTemperatureTargetValue(temperatureKeyboardTarget, normalized)
+    void executeCommand({
+      command: temperatureKeyboardTarget === 'nozzle' ? 'setNozzleTarget' : 'setBedTarget',
+      targetCelsius: normalized,
+    })
     closeTemperatureKeyboard()
+  }
+
+  function handleHeatingPresetApply(nozzle: number, bed: number): void {
+    setPrintNozzleTargetTemp(nozzle)
+    setPrintBedTargetTemp(bed)
+    void executeCommand({ command: 'consoleGcode', gcode: `M104 S${nozzle}\nM140 S${bed}` })
+    closeTemperatureKeyboard()
+  }
+
+  function handleHeatingDisable(): void {
+    setPrintNozzleTargetTemp(0)
+    setPrintBedTargetTemp(0)
+    void executeCommand({ command: 'turnOffHeaters' })
+    closeTemperatureKeyboard()
+  }
+
+  function handleFanPercentChange(nextValue: number): void {
+    const normalized = Math.round(clampAxisValue(nextValue, 0, 100))
+    setPrintFanPercent(normalized)
+    void executeCommand({ command: 'setFanPercent', percent: normalized })
+  }
+
+  function renderTemperatureKeyboardPanel(className = ''): ReactNode {
+    return (
+      <aside className={`print-temp-keyboard-side ${className}`.trim()} aria-label="Цифровая клавиатура температуры">
+        <div className="print-temp-keyboard-head">
+          <p className="print-temp-keyboard-label">Температура</p>
+          <button
+            type="button"
+            className="print-cancel-modal-close print-temp-keyboard-close"
+            aria-label="Закрыть клавиатуру температуры"
+            onClick={closeTemperatureKeyboard}
+          >
+            ×
+          </button>
+        </div>
+        <p className="print-temp-keyboard-display">
+          {temperatureKeyboardValue}
+          {temperatureKeyboardValue.length > 0 ? <span> °C</span> : null}
+        </p>
+        <div className="print-temp-keyboard-grid">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+            <button
+              key={digit}
+              type="button"
+              className="settings-network-btn print-temp-keyboard-key"
+              onClick={() => handleTemperatureKeyboardDigit(digit)}
+              aria-label={`Цифра ${digit}`}
+            >
+              {digit}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="settings-network-btn print-temp-keyboard-key"
+            onClick={handleTemperatureKeyboardBackspace}
+          >
+            Стереть
+          </button>
+          <button
+            type="button"
+            className="settings-network-btn print-temp-keyboard-key"
+            onClick={() => handleTemperatureKeyboardDigit('0')}
+            aria-label="Цифра 0"
+          >
+            0
+          </button>
+          <span className="print-temp-keyboard-spacer" aria-hidden="true" />
+        </div>
+        <button
+          type="button"
+          className="settings-network-btn settings-network-btn-primary print-temp-keyboard-submit"
+          onClick={handleTemperatureKeyboardSubmit}
+        >
+          Ввод
+        </button>
+      </aside>
+    )
   }
 
   function resolvePrintTuneKeyboardMeta(target: PrintTuneNumericKeyboardTarget): {
@@ -1897,22 +2406,7 @@ function App() {
           testIdPrefix: 'print-tune-temp-bed',
         },
       ]
-      const chartSeries = [
-        {
-          id: 'nozzle' as const,
-          label: 'Сопло',
-          tone: 'orange' as const,
-          values: nozzleTrendValues,
-          target: printNozzleTargetTemp,
-        },
-        {
-          id: 'bed' as const,
-          label: 'Стол',
-          tone: 'green' as const,
-          values: bedTrendValues,
-          target: printBedTargetTemp,
-        },
-      ].filter((seriesItem) => {
+      const chartSeries = temperatureChartSeries.filter((seriesItem) => {
         if (temperatureChartMode === 'both') {
           return true
         }
@@ -1996,61 +2490,7 @@ function App() {
               />
             </section>
 
-            {temperatureKeyboardTarget !== null ? (
-              <aside className="print-temp-keyboard-side" aria-label="Цифровая клавиатура температуры">
-                <div className="print-temp-keyboard-head">
-                  <p className="print-temp-keyboard-label">Температура</p>
-                  <button
-                    type="button"
-                    className="print-cancel-modal-close print-temp-keyboard-close"
-                    aria-label="Закрыть клавиатуру температуры"
-                    onClick={closeTemperatureKeyboard}
-                  >
-                    ×
-                  </button>
-                </div>
-                <p className="print-temp-keyboard-display">
-                  {temperatureKeyboardValue}
-                  {temperatureKeyboardValue.length > 0 ? <span> °C</span> : null}
-                </p>
-                <div className="print-temp-keyboard-grid">
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-                    <button
-                      key={digit}
-                      type="button"
-                      className="settings-network-btn print-temp-keyboard-key"
-                      onClick={() => handleTemperatureKeyboardDigit(digit)}
-                      aria-label={`Цифра ${digit}`}
-                    >
-                      {digit}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="settings-network-btn print-temp-keyboard-key"
-                    onClick={handleTemperatureKeyboardBackspace}
-                  >
-                    Стереть
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-network-btn print-temp-keyboard-key"
-                    onClick={() => handleTemperatureKeyboardDigit('0')}
-                    aria-label="Цифра 0"
-                  >
-                    0
-                  </button>
-                  <span className="print-temp-keyboard-spacer" aria-hidden="true" />
-                </div>
-                <button
-                  type="button"
-                  className="settings-network-btn settings-network-btn-primary print-temp-keyboard-submit"
-                  onClick={handleTemperatureKeyboardSubmit}
-                >
-                  Ввод
-                </button>
-              </aside>
-            ) : null}
+            {temperatureKeyboardTarget !== null ? renderTemperatureKeyboardPanel() : null}
           </div>
         </div>
       )
@@ -2060,6 +2500,7 @@ function App() {
       const activeKeyboardMeta = printTuneKeyboardTarget === null
         ? null
         : resolvePrintTuneKeyboardMeta(printTuneKeyboardTarget)
+      const activeTuneNote = activePrintTuneMeta?.note ?? ''
 
       return (
         <div
@@ -2067,7 +2508,7 @@ function App() {
         >
           <div className="print-tune-compact-workspace">
             <section className="print-tune-compact-main-panel">
-              {activePrintTuneMeta.note.length > 0 ? <p className="print-tune-note">{activePrintTuneMeta.note}</p> : null}
+              {activeTuneNote.length > 0 ? <p className="print-tune-note">{activeTuneNote}</p> : null}
               <div className="print-tune-compact-content">
                 {content}
               </div>
@@ -2239,7 +2680,7 @@ function App() {
             min={0}
             max={100}
             step={5}
-            onChange={(nextValue) => setPrintFanPercent(Math.round(nextValue))}
+            onChange={handleFanPercentChange}
             testId="print-tune-fan-slider"
           />
         </div>
@@ -2367,7 +2808,7 @@ function App() {
         <div className="print-tune-modal-stack">
           <p className="print-tune-current-row">
             <span>Прогресс</span>
-            <strong>{DASHBOARD_VALUES.progressPercent}%</strong>
+            <strong>{printFill}%</strong>
           </p>
           <p className="print-tune-current-row">
             <span>Расчётное завершение</span>
@@ -2389,7 +2830,7 @@ function App() {
 
     return renderCompactTuneContent(
       <>
-        {renderCompactCurrentRow('Текущий слой', `${DASHBOARD_VALUES.layerCurrent} / ${DASHBOARD_VALUES.layerTotal}`)}
+        {renderCompactCurrentRow('Текущий слой', `${displayLayerCurrent} / ${displayLayerTotal}`)}
         <label className="print-tune-input-wrap print-tune-input-wrap-layer print-tune-input-wrap-layer-compact">
           <span>Пауза на слое</span>
           <input
@@ -2445,329 +2886,64 @@ function App() {
     }
   }, [])
 
+  const dashboardStatusDock = (
+    <DashboardStatusDock
+      activeTopPopup={activeTopPopup}
+      hasUnreadPrinterNotification={hasUnreadPrinterNotification}
+      onOpenTopPopup={openTopPopup}
+      onButtonRef={setTopButtonRef}
+    />
+  )
+
   return (
     <main className={`app-root ${isMaxPerformanceModeEnabled ? 'is-performance-mode' : ''}`}>
       <section className="screen-shell" data-testid="screen-shell" ref={screenShellRef}>
-        <header className="top-bar">
-          <div className="brand-wrap">
-            <h1>TreeD Принтер</h1>
-            <span className="print-state" data-testid="top-bar-screen-label">{topBarScreenLabel}</span>
-          </div>
-          <div className="top-icons" aria-label="иконки статуса">
-            {TOP_STATUS_BUTTONS.map((item) => (
-              <StatusIconButton
-                key={item.id}
-                icon={item.icon}
-                label={item.label}
-                tone={item.tone}
-                showNotificationDot={item.showNotificationDot}
-                className={activeTopPopup === item.id ? 'is-active' : undefined}
-                aria-haspopup="dialog"
-                aria-expanded={activeTopPopup === item.id}
-                onClick={() => openTopPopup(item.id)}
-                ref={(node) => setTopButtonRef(item.id, node)}
-              />
-            ))}
-          </div>
-        </header>
-
-        <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''}`}>
+        <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''} ${activeScreen === 'control' ? 'is-control-active' : ''}`}>
           {activeScreen === 'dashboard' ? (
-            hasActivePrint ? (
-              <>
-              <section className="job-card">
-                <div className="preview-panel">
-                  <div className="preview-inner">
-                    <PrintPreviewIcon />
-                  </div>
-                </div>
-
-                <div className="job-info">
-                  <p className="job-name">{activePrintFileName ?? DASHBOARD_VALUES.fileName}</p>
-
-                  <button
-                    type="button"
-                    className="print-tune-hitbox print-tune-hitbox-progress"
-                    onClick={() => handlePrintTuneGroupOpen('progress')}
-                    aria-label="Открыть параметры прогресса печати"
-                    data-testid="print-tune-group-progress"
-                  >
-                    <div className="job-metrics">
-                      <div>
-                        <p className="label">Прогресс</p>
-                        <p className="job-main-value">{DASHBOARD_VALUES.progressPercent}%</p>
-                      </div>
-                      <div className="job-metrics-right">
-                        <p className="label">Конец</p>
-                        <p className="job-main-value">{adjustedEtaTime}</p>
-                      </div>
-                    </div>
-
-                    <div className="job-meter">
-                      <div className="job-meter-fill" style={{ width: `${printFill}%` }} />
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="print-tune-hitbox print-tune-hitbox-layer"
-                    onClick={() => handlePrintTuneGroupOpen('layers')}
-                    aria-label="Открыть параметры слоя"
-                    data-testid="print-tune-group-layers"
-                  >
-                    <div className="job-layer-row">
-                      <span className="label">Слой</span>
-                      <strong>
-                        {DASHBOARD_VALUES.layerCurrent} / {DASHBOARD_VALUES.layerTotal}
-                      </strong>
-                    </div>
-                  </button>
-                </div>
-              </section>
-
-              <section className="right-column">
-                <div className="stats-actions-row">
-                  <article className="stats-card">
-                    <div className="temp-grid">
-                      {temperatureMetrics.map((metric) => (
-                        <button
-                          key={metric.label}
-                          type="button"
-                          className="print-tune-hitbox print-tune-hitbox-metric"
-                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
-                          aria-label={`Открыть параметры: ${metric.label}`}
-                          data-testid={`print-tune-group-${metric.key}`}
-                        >
-                          <TemperatureMetric
-                            label={metric.label}
-                            current={metric.current}
-                            target={metric.target}
-                            meterTone={metric.meterTone}
-                            fillPercent={metric.fillPercent}
-                          />
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="three-up-grid">
-                      {quickMetrics.map((metric) => (
-                        <button
-                          key={metric.label}
-                          type="button"
-                          className="print-tune-hitbox print-tune-hitbox-metric"
-                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
-                          aria-label={`Открыть параметры: ${metric.label}`}
-                          data-testid={`print-tune-group-${metric.key}`}
-                        >
-                          <PlainMetric
-                            label={metric.label}
-                            value={metric.value}
-                            unit={metric.unit}
-                            valueClassName={metric.valueClassName}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-
-                  <div className="action-stack" role="group" aria-label="действия печати">
-                    <ActionSquareButton
-                      icon={isPrintPaused || pendingCommand === 'resume' ? 'actionResume' : 'actionPause'}
-                      label={
-                        pendingCommand === 'pause'
-                          ? 'Пауза...'
-                          : pendingCommand === 'resume'
-                            ? 'Продолжение...'
-                            : isPrintPaused
-                              ? 'Продолжить'
-                              : 'Пауза'
-                      }
-                      onClick={() => void handlePause()}
-                      disabled={isBusy}
-                    />
-                    <ActionSquareButton
-                      icon="actionStopCritical"
-                      tone="danger"
-                      label={pendingCommand === 'cancel' ? 'Стоп...' : 'Стоп'}
-                      onClick={handleStopRequest}
-                      disabled={isBusy}
-                    />
-                  </div>
-                </div>
-
-                <div className="process-row">
-                  <article className="process-card">
-                    <div className="process-grid">
-                      {processMetrics.map((metric) => (
-                        <button
-                          key={metric.label}
-                          type="button"
-                          className="print-tune-hitbox print-tune-hitbox-metric"
-                          onClick={() => handlePrintTuneGroupOpen(metric.key)}
-                          aria-label={`Открыть параметры: ${metric.label}`}
-                          data-testid={`print-tune-group-${metric.key}`}
-                        >
-                          <PlainMetric
-                            label={metric.label}
-                            value={metric.value}
-                            unit={metric.unit}
-                            valueClassName="process-value"
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-
-                  <aside className="zoffset-card">
-                    <div className="zoffset-head">
-                      <p className="label">Z-offset</p>
-                      <p className="value zoffset-value">
-                        {DASHBOARD_VALUES.zOffsetMm.toFixed(2)}<span>мм</span>
-                      </p>
-                    </div>
-                    <div
-                      className="step-selector"
-                      role="group"
-                      aria-label="шаг babystep"
-                      style={{ '--step-active-index': String(babystepActiveIndex) } as CSSProperties}
-                    >
-                      <span className="step-selector-indicator" aria-hidden="true" />
-                      {BABYSTEP_STEP_OPTIONS.map((step) => (
-                        <button
-                          key={step}
-                          type="button"
-                          className={`step-btn ${babystepStep === step ? 'is-active' : ''}`}
-                          onClick={() => setBabystepStep(step)}
-                          aria-pressed={babystepStep === step}
-                        >
-                          {step}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="babystep-controls" role="group" aria-label="управление babystep">
-                      <button
-                        type="button"
-                        className="babystep-btn"
-                        aria-label={`Babystep минус ${babystepStep}`}
-                      >
-                        -
-                      </button>
-                      <button
-                        type="button"
-                        className="babystep-btn"
-                        aria-label={`Babystep плюс ${babystepStep}`}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </aside>
-                </div>
-              </section>
-              </>
-            ) : (
-              <section className="dashboard-idle-screen" data-testid="screen-dashboard-idle">
-                <div className="dashboard-idle-hero">
-                  <div className="dashboard-idle-logo" aria-hidden="true">
-                    <img className="dashboard-idle-logo-image" src={treeDLogoAsset} alt="" />
-                  </div>
-                </div>
-
-                <aside className="dashboard-idle-sidebar">
-                  <article className="idle-mini-widget idle-mini-widget-temps">
-                    <p className="idle-mini-label">Температура</p>
-                    <div className="idle-temp-grid">
-                      <p><span>Сопло</span><strong>{idleNozzleTempLabel}</strong></p>
-                      <p><span>Стол</span><strong>{idleBedTempLabel}</strong></p>
-                    </div>
-                  </article>
-
-                  <article className="idle-mini-widget idle-mini-widget-service">
-                    <p className="idle-mini-label">ТО</p>
-                    <div className="idle-service-metrics">
-                      <p><span>Пробег</span><strong>{MAINTENANCE_STATUS.runtimeHours} ч</strong></p>
-                      <p><span>До ТО</span><strong>{MAINTENANCE_STATUS.hoursLeft} ч</strong></p>
-                    </div>
-                    <div className="idle-service-time">
-                      <span>Время</span>
-                      <strong>{formattedSnapshotTime}</strong>
-                    </div>
-                  </article>
-
-                  <article className="dashboard-idle-notes" aria-label="Заметки">
-                    <h3>Заметки</h3>
-                    <textarea
-                      ref={idleNotesInputRef}
-                      className="dashboard-idle-notes-input"
-                      value={idleNotesText}
-                      onFocus={handleIdleNotesKeyboardOpen}
-                      onChange={handleIdleNotesChange}
-                      spellCheck={false}
-                      data-testid="idle-notes-input"
-                    />
-                  </article>
-                </aside>
-
-                {isIdleNotesKeyboardOpen ? (
-                  <div className="idle-notes-keyboard" data-testid="idle-notes-keyboard">
-                    {IDLE_NOTES_KEYBOARD_ROWS.map((row, rowIndex) => (
-                      <div className="idle-notes-keyboard-row" key={`idle-notes-keyboard-row-${rowIndex}`}>
-                        {row.map((label) => (
-                          <button
-                            key={label}
-                            type="button"
-                            className="idle-notes-keyboard-key"
-                            aria-label={`Символ ${label}`}
-                            onMouseDown={handleIdleNotesKeyMouseDown}
-                            onClick={() => handleIdleNotesVirtualKey(label.toLocaleLowerCase('ru-RU'))}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-
-                    <div className="idle-notes-keyboard-row idle-notes-keyboard-row-actions">
-                      <button
-                        type="button"
-                        className="idle-notes-keyboard-key idle-notes-keyboard-key-action"
-                        aria-label="Удалить символ"
-                        onMouseDown={handleIdleNotesKeyMouseDown}
-                        onClick={() => handleIdleNotesVirtualKey('backspace')}
-                      >
-                        ⌫
-                      </button>
-                      <button
-                        type="button"
-                        className="idle-notes-keyboard-key idle-notes-keyboard-key-space"
-                        aria-label="Пробел"
-                        onMouseDown={handleIdleNotesKeyMouseDown}
-                        onClick={() => handleIdleNotesVirtualKey('space')}
-                      >
-                        Пробел
-                      </button>
-                      <button
-                        type="button"
-                        className="idle-notes-keyboard-key idle-notes-keyboard-key-action"
-                        aria-label="Новая строка"
-                        onMouseDown={handleIdleNotesKeyMouseDown}
-                        onClick={() => handleIdleNotesVirtualKey('enter')}
-                      >
-                        ↵
-                      </button>
-                      <button
-                        type="button"
-                        className="idle-notes-keyboard-key idle-notes-keyboard-key-close"
-                        aria-label="Скрыть клавиатуру"
-                        onMouseDown={handleIdleNotesKeyMouseDown}
-                        onClick={handleIdleNotesKeyboardClose}
-                      >
-                        Скрыть
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </section>
-            )
+            <DashboardPage
+              statusDock={dashboardStatusDock}
+              logoSrc={treeDLogoAsset}
+              hasActivePrint={hasActivePrint}
+              displayPrintFileName={displayPrintFileName}
+              printFill={printFill}
+              adjustedEtaTime={adjustedEtaTime}
+              displayLayerCurrent={displayLayerCurrent}
+              displayLayerTotal={displayLayerTotal}
+              temperatureTargets={dashboardTemperatureTargets}
+              quickMetrics={quickMetrics}
+              processMetrics={processMetrics}
+              isPrintPaused={isPrintPaused}
+              pendingCommand={pendingCommand}
+              isBusy={isBusy}
+              printPauseBlockReason={printPauseBlockReason}
+              printCancelBlockReason={printCancelBlockReason}
+              babystepStep={babystepStep}
+              babystepActiveIndex={babystepActiveIndex}
+              idleHeroStatusLabel={idleHeroStatusLabel}
+              idleWidgetOrder={idleWidgetOrder}
+              armedIdleWidgetId={armedIdleWidgetId}
+              draggingIdleWidgetId={draggingIdleWidgetId}
+              idleWidgetRefs={idleWidgetRefs}
+              maintenanceSummary={MAINTENANCE_STATUS}
+              idleNotesInputRef={idleNotesInputRef}
+              idleNotesText={idleNotesText}
+              isIdleNotesKeyboardOpen={isIdleNotesKeyboardOpen}
+              idleNotesKeyboardRows={IDLE_NOTES_KEYBOARD_ROWS}
+              onPrintTuneGroupOpen={handlePrintTuneGroupOpen}
+              onPause={() => void handlePause()}
+              onStopRequest={handleStopRequest}
+              onBabystepStepChange={setBabystepStep}
+              onIdleWidgetTargetOpen={openIdleWidgetTarget}
+              onIdleWidgetDragPointerDown={handleIdleWidgetDragPointerDown}
+              onIdleWidgetDragPointerMove={handleIdleWidgetDragPointerMove}
+              onIdleWidgetDragPointerEnd={handleIdleWidgetDragPointerEnd}
+              onIdleWidgetDragHandleClick={handleIdleWidgetDragHandleClick}
+              onIdleNotesKeyboardOpen={handleIdleNotesKeyboardOpen}
+              onIdleNotesChange={handleIdleNotesChange}
+              onIdleNotesKeyMouseDown={handleIdleNotesKeyMouseDown}
+              onIdleNotesVirtualKey={handleIdleNotesVirtualKey}
+              onIdleNotesKeyboardClose={handleIdleNotesKeyboardClose}
+            />
           ) : isFilesScreenActive ? (
             <section className="files-screen" data-testid="screen-files">
               <div className="files-scroll-area" data-testid="files-scroll-area">
@@ -2811,160 +2987,563 @@ function App() {
             </section>
           ) : activeScreen === 'control' ? (
             <section className="control-screen" data-testid="screen-control">
-              <div className="control-scroll-area">
-                <header className="control-screen-head">
-                  <p className="control-screen-note">Парковка, сервисный режим и ручное перемещение осей.</p>
-                </header>
+              <div className={`control-layout ${isControlMenuCompact ? 'is-menu-compact' : ''}`}>
+                <aside className={`settings-menu-shell control-menu-shell ${isControlMenuCompact ? 'is-compact' : ''}`}>
+                  <button
+                    type="button"
+                    className="control-menu-collapse-btn"
+                    aria-expanded={!isControlMenuCompact}
+                    aria-label={isControlMenuCompact ? 'Развернуть меню управления' : 'Свернуть меню управления до иконок'}
+                    data-testid="control-menu-mode-toggle"
+                    onClick={handleControlMenuCompactToggle}
+                  >
+                    <IconMask name="utilityChevron" size={20} className="control-menu-collapse-icon" />
+                  </button>
+                  <SettingsSidebarMenu
+                    options={CONTROL_GROUP_OPTIONS}
+                    value={activeControlGroup}
+                    onChange={setActiveControlGroup}
+                    ariaLabel="Разделы управления"
+                    testIdPrefix="control-group"
+                    iconSize={28}
+                  />
+                </aside>
 
-                <div className="control-grid">
-                  <div className="control-side-stack">
-                    <div className="control-side-top">
-                      <article className="control-card control-card-parking">
-                        <h3 className="control-card-title">Парковка</h3>
-                        <SegmentedToggle
-                          options={PARKING_MODE_OPTIONS}
-                          value={parkingMode}
-                          onChange={handleParkingModeChange}
-                          ariaLabel="Режим парковки"
-                          testIdPrefix="parking-mode"
-                        />
-                        {parkingMode === 'axis' ? (
-                          <SegmentedToggle
-                            options={PARKING_AXIS_OPTIONS}
-                            value={parkingAxis}
-                            onChange={handleParkingAxisChange}
-                            ariaLabel="Выбор оси парковки"
-                            testIdPrefix="parking-axis"
-                          />
-                        ) : null}
-                        <button
-                          type="button"
-                          className="control-action-btn"
-                          data-testid="parking-action-button"
-                          onClick={() => void handleParkingCommand()}
-                          disabled={isBusy}
-                        >
-                          {pendingCommand === 'home'
-                            ? 'Парковка...'
-                            : parkingMode === 'all'
-                              ? 'Парковка по всем осям'
-                              : `Парковка оси ${parkingAxis}`}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="control-action-btn control-action-btn-danger"
-                          data-testid="motors-disable-button"
-                          onClick={handleMotorsDisable}
-                          disabled={isBusy}
-                        >
-                          Отключить моторы
-                        </button>
-                      </article>
-
-                      <article className="control-card control-card-service">
-                        <h3 className="control-card-title">Сервисный режим</h3>
-                        <p className="control-status-row">
-                          <span>Статус</span>
-                          <strong>{isServiceModeEnabled ? 'Включен' : 'Выключен'}</strong>
+                <div className="settings-content-shell control-content-shell">
+                  {activeControlGroup === 'maintenance' ? (
+                    <div className="control-maintenance-header">
+                      <div className="control-maintenance-heading">
+                        <p className="control-tab-label" data-testid="control-active-tab-label">Т.О</p>
+                        <p className="control-maintenance-subtitle">
+                          Сервисное обслуживание и напоминания для вашего 3D-принтера.
                         </p>
-                        <button
-                          type="button"
-                          className="control-service-btn"
-                          data-testid="service-mode-button"
-                          aria-pressed={isServiceModeEnabled}
-                          onClick={handleServiceModeToggle}
-                        >
-                          {isServiceModeEnabled ? 'Выключить сервисный режим' : 'Включить сервисный режим'}
-                        </button>
-                        <p className="control-card-hint">Используйте только во время обслуживания принтера.</p>
-                      </article>
-                    </div>
-
-                    <article className="control-card control-card-fan">
-                      <h3 className="control-card-title">Управление обдувом</h3>
-                      <p className="control-status-row">
-                        <span>Обдув модели</span>
-                        <strong>{modelFanPercent}%</strong>
-                      </p>
-                      <HorizontalSteppedSlider
-                        value={modelFanPercent}
-                        min={MODEL_FAN_BOUNDS_PERCENT.min}
-                        max={MODEL_FAN_BOUNDS_PERCENT.max}
-                        step={MODEL_FAN_STEP_PERCENT}
-                        onChange={handleModelFanPercentChange}
-                        disabled={isBusy}
-                        testId="model-fan-slider"
-                      />
-                    </article>
-                  </div>
-
-                  <article className="control-card control-card-motion">
-                    <h3 className="control-card-title">Перемещение по осям</h3>
-                    <SegmentedToggle
-                      options={MOVEMENT_MODE_OPTIONS}
-                      value={movementMode}
-                      onChange={handleMovementModeChange}
-                      ariaLabel="Режим перемещения"
-                      testIdPrefix="move-mode"
-                    />
-                    {movementMode === 'buttons' ? (
-                      <div className="control-motion-buttons">
-                        <SegmentedToggle
-                          options={MOVE_STEP_OPTIONS}
-                          value={moveStepKey}
-                          onChange={handleMoveStepChange}
-                          ariaLabel="Шаг перемещения"
-                          testIdPrefix="move-step"
-                        />
-                        <div className="control-coordinates-panel">
-                          <p className="joystick-readout" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
-                        </div>
-                        <div className="control-cross-wrap">
-                          <AxisCrossControls
-                            onMove={handleAxisMove}
-                            disabled={isBusy}
-                          />
-                        </div>
                       </div>
+                      <p className="control-maintenance-status-pill">
+                        Следующее ТО через {MAINTENANCE_STATUS.hoursLeft} ч
+                        <span aria-hidden="true" />
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="control-tab-label" data-testid="control-active-tab-label">
+                      {activeControlGroupOption.label}
+                    </p>
+                  )}
+                  <div className="control-scroll-area">
+                    {activeControlGroup === 'movement' ? (
+                      <div className="control-grid">
+                        <article className="control-card control-card-parking">
+                          <div className="control-card-head">
+                            <h3 className="control-card-title">Парковка</h3>
+                            {pendingCommand === 'home' ? (
+                              <p className="control-card-state">Парковка...</p>
+                            ) : null}
+                          </div>
+                          <div className="control-parking-targets" role="group" aria-label="Цель парковки">
+                            <button
+                              type="button"
+                              className={`control-target-btn ${activeControlFlashKey === 'parking-all' ? 'is-active' : ''}`}
+                              aria-pressed={activeControlFlashKey === 'parking-all'}
+                              data-testid="parking-mode-all"
+                              onClick={() => void handleParkingTargetSelect('all')}
+                              disabled={isBusy}
+                            >
+                              XYZ
+                            </button>
+                            {PARKING_AXIS_OPTIONS.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`control-target-btn ${activeControlFlashKey === `parking-${option.id}` ? 'is-active' : ''}`}
+                                aria-pressed={activeControlFlashKey === `parking-${option.id}`}
+                                data-testid={`parking-axis-${option.id}`}
+                                onClick={() => void handleParkingTargetSelect('axis', option.id)}
+                                disabled={isBusy}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            className="control-service-btn"
+                            data-testid="service-mode-button"
+                            aria-pressed={activeControlFlashKey === 'service-mode'}
+                            onClick={handleServiceModeToggle}
+                          >
+                            Сервисный режим
+                          </button>
+
+                          <button
+                            type="button"
+                            className="control-action-btn control-action-btn-danger"
+                            data-testid="motors-disable-button"
+                            onClick={handleMotorsDisable}
+                            disabled={isBusy}
+                          >
+                            Отключить моторы
+                          </button>
+                        </article>
+
+                        <article className="control-card control-card-motion">
+                          <div className="control-card-head">
+                            <h3 className="control-card-title">Оси</h3>
+                          </div>
+                          <SegmentedToggle
+                            options={MOVEMENT_MODE_OPTIONS}
+                            value={movementMode}
+                            onChange={handleMovementModeChange}
+                            ariaLabel="Режим перемещения"
+                            testIdPrefix="move-mode"
+                          />
+                          {movementMode === 'buttons' ? (
+                            <div className="control-motion-buttons">
+                              <SegmentedToggle
+                                options={MOVE_STEP_OPTIONS}
+                                value={moveStepKey}
+                                onChange={handleMoveStepChange}
+                                ariaLabel="Шаг перемещения"
+                                testIdPrefix="move-step"
+                              />
+                              <div className="control-coordinates-panel control-subpanel">
+                                <p className="joystick-readout axis-coordinate-readout" data-testid="axis-coordinates" aria-label={axisCoordinatesLabel}>
+                                  {axisCoordinateItems.map((item) => (
+                                    <span key={item.axis} className="axis-coordinate-item">
+                                      <span className="axis-coordinate-axis">{item.axis}</span>
+                                      <span className="axis-coordinate-value">{item.value}</span>
+                                    </span>
+                                  ))}
+                                </p>
+                                <div className="axis-home-status" aria-label="Статус хоуминга осей">
+                                  {axisHomeStatuses.map((item) => (
+                                    <span
+                                      key={item.axis}
+                                      className={`axis-home-indicator${item.homed ? ' is-homed' : ''}`}
+                                      aria-label={`Ось ${item.axis} ${item.homed ? 'захоумлена' : 'не захоумлена'}`}
+                                    >
+                                      <span className="axis-home-label">{item.axis}</span>
+                                      <span className="axis-home-mark" aria-hidden="true" />
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="control-cross-wrap">
+                                <AxisCrossControls
+                                  onMove={handleAxisMove}
+                                  onFilamentMove={handleFilamentMove}
+                                  disabled={isBusy}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="joystick-panel">
+                              <div className="joystick-xy-control">
+                                <p className="joystick-axis-title">XY</p>
+                                <VirtualJoystick
+                                  testId="axis-joystick"
+                                  disabled={isBusy}
+                                  onVectorChange={handleJoystickVectorChange}
+                                />
+                              </div>
+                              <div className="joystick-z-control">
+                                <p className="joystick-axis-title">Z</p>
+                                <VerticalAxisSlider
+                                  value={printHeadPosition.z}
+                                  min={HEAD_Z_BOUNDS_MM.min}
+                                  max={HEAD_Z_BOUNDS_MM.max}
+                                  step={1}
+                                  onChange={handleJoystickZChange}
+                                  minAtTop
+                                  disabled={isBusy}
+                                  testId="axis-z-slider"
+                                />
+                              </div>
+                              <div className="joystick-meta">
+                                <div className="joystick-meta-block">
+                                  <p className="joystick-meta-label">Координаты</p>
+                                  <p className="joystick-readout control-subpanel" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
+                                </div>
+                                <div className="joystick-meta-block">
+                                  <p className="joystick-meta-label">Скорость XY</p>
+                                  <p className="joystick-readout control-subpanel">{joystickSpeedMmS.toFixed(1)} / 50 мм/с</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </article>
+                      </div>
+                    ) : activeControlGroup === 'heating' ? (
+                      <div className="control-heating-grid">
+                        <div className="control-heating-main">
+                          <section className="control-heating-rows" aria-label="Температуры сопла и стола">
+                            {heatingControlRows.map((row) => (
+                              <div key={row.id} className="control-heating-row control-subpanel">
+                                <div className="control-heating-sensor">
+                                  <span className={`control-heating-sensor-icon is-${row.tone}`} aria-hidden="true">
+                                    <IconMask name={row.icon} size={18} />
+                                  </span>
+                                <div className="control-heating-sensor-text">
+                                  <h3>{row.uiLabel}</h3>
+                                </div>
+                                </div>
+                                <div className="control-heating-current">
+                                  {rounded(row.current)} <span>°C</span>
+                                </div>
+                                <TuneCompactStepperInput
+                                  value={row.target}
+                                  min={0}
+                                  max={300}
+                                  step={5}
+                                  unit="°C"
+                                  readOnly={true}
+                                  displayValue={
+                                    temperatureKeyboardTarget === row.keyboardTarget
+                                      ? temperatureKeyboardValue
+                                      : String(Math.round(row.target))
+                                  }
+                                  onChange={(nextValue) => row.onTargetChange(Math.round(clampAxisValue(nextValue, 0, 300)))}
+                                  onInputFocus={() => openTemperatureKeyboard(row.keyboardTarget)}
+                                  inputAriaLabel={`Целевая температура ${row.uiLabel.toLowerCase()}`}
+                                  testIdPrefix={row.testIdPrefix}
+                                />
+                              </div>
+                            ))}
+                          </section>
+
+                          <div className="control-heating-chart-block">
+                            <div className="print-temp-chart-head control-heating-chart-head">
+                              <p className="print-temp-chart-title">График нагрева</p>
+                            </div>
+                            <TemperatureTrendChart
+                              series={temperatureChartSeries}
+                              testId="control-heating-chart"
+                            />
+                          </div>
+                        </div>
+
+                        {temperatureKeyboardTarget !== null ? (
+                          <article className="control-card control-card-heating-keyboard control-subpanel">
+                            {renderTemperatureKeyboardPanel('is-control')}
+                          </article>
+                        ) : (
+                          <article className="control-card control-card-heating-presets control-subpanel">
+                            <div className="control-card-head">
+                              <h3 className="control-card-title">Предустановки</h3>
+                            </div>
+
+                            <div className="control-heating-presets-list" role="group" aria-label="Предустановки нагрева">
+                              {HEATING_PRESET_OPTIONS.map((preset) => {
+                                const isActive =
+                                  printNozzleTargetTemp === preset.nozzle &&
+                                  printBedTargetTemp === preset.bed
+
+                                return (
+                                  <button
+                                    key={preset.id}
+                                    type="button"
+                                    className={`control-heating-preset-btn${isActive ? ' is-active' : ''}`}
+                                    aria-pressed={isActive}
+                                    data-testid={`control-heating-preset-${preset.id}`}
+                                    onClick={() => handleHeatingPresetApply(preset.nozzle, preset.bed)}
+                                  >
+                                    <span className="control-heating-preset-label">{preset.label}</span>
+                                    <span className="control-heating-preset-values">
+                                      {preset.nozzle}° / {preset.bed}°
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+
+                            <button
+                              type="button"
+                              className={`control-heating-cooldown-btn${printNozzleTargetTemp === 0 && printBedTargetTemp === 0 ? ' is-active' : ''}`}
+                              aria-pressed={printNozzleTargetTemp === 0 && printBedTargetTemp === 0}
+                              data-testid="control-heating-disable"
+                              onClick={handleHeatingDisable}
+                            >
+                              <span className="control-heating-cooldown-icon" aria-hidden="true">
+                                <IconMask name="utilitySnowflake" size={18} />
+                              </span>
+                              <span>Отключить нагрев</span>
+                            </button>
+                          </article>
+                        )}
+                      </div>
+                    ) : activeControlGroup === 'fans' ? (
+                      <article className="control-card control-card-fan">
+                        <div className="control-fan-body">
+                          <section className="control-fan-summary" aria-label="Текущее состояние вентилятора">
+                            <div className="control-fan-summary-copy">
+                              <h4>Обдув модели</h4>
+                              <p>Охлаждение / воздушный поток</p>
+                            </div>
+                            <div className="control-fan-summary-value">
+                              <strong>{printFanPercent}%</strong>
+                              <span>Скорость вентилятора</span>
+                            </div>
+                          </section>
+
+                          <section className="control-fan-slider-panel control-subpanel" aria-label="Регулировка скорости вентилятора">
+                            <button
+                              type="button"
+                              className="control-fan-step-btn"
+                              aria-label="Уменьшить скорость вентилятора на 5 процентов"
+                              onClick={() => handleFanPercentChange(printFanPercent - 5)}
+                              disabled={isBusy || printFanPercent <= 0}
+                            >
+                              -
+                            </button>
+                            <div className="control-fan-slider-core">
+                              <HorizontalSteppedSlider
+                                className="control-fan-design-slider"
+                                value={printFanPercent}
+                                min={0}
+                                max={100}
+                                step={5}
+                                onChange={handleFanPercentChange}
+                                disabled={isBusy}
+                                testId="control-fan-slider"
+                              />
+                              <div className="control-fan-slider-labels" aria-hidden="true">
+                                <span>0</span>
+                                <span>25</span>
+                                <span>50</span>
+                                <span>75</span>
+                                <span>100%</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="control-fan-step-btn"
+                              aria-label="Увеличить скорость вентилятора на 5 процентов"
+                              onClick={() => handleFanPercentChange(printFanPercent + 5)}
+                              disabled={isBusy || printFanPercent >= 100}
+                            >
+                              +
+                            </button>
+                          </section>
+
+                          <section className="control-fan-presets" aria-labelledby="control-fan-presets-title">
+                            <p id="control-fan-presets-title">Предустановки</p>
+                            <div className="control-fan-preset-row" role="group" aria-label="Предустановки вентилятора">
+                              {FAN_PRESET_OPTIONS.map((preset) => {
+                                const isActive = printFanPercent === preset.value
+
+                                return (
+                                  <button
+                                    key={preset.id}
+                                    type="button"
+                                    className={`control-fan-preset-btn${isActive ? ' is-active' : ''}`}
+                                    aria-pressed={isActive}
+                                    onClick={() => handleFanPercentChange(preset.value)}
+                                    disabled={isBusy}
+                                  >
+                                    <span className="control-fan-preset-dot" aria-hidden="true" />
+                                    <span>{preset.label}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </section>
+
+                          <section className="control-fan-note control-subpanel">
+                            <span className="control-fan-info-icon" aria-hidden="true">i</span>
+                            <p>Регулирует интенсивность обдува модели для улучшения качества печати.</p>
+                            <IconMask name="metricFan" size={44} className="control-fan-note-icon" />
+                          </section>
+                        </div>
+                      </article>
+                    ) : activeControlGroup === 'lighting' ? (
+                      <article className="control-card-lighting">
+                        <div className="control-card-head">
+                          <h3 className="control-card-title">Подсветка</h3>
+                        </div>
+                        <div className="control-lighting-list" role="group" aria-label="Управление подсветкой">
+                          <button
+                            type="button"
+                            className={`control-lighting-row control-subpanel${isMainLightEnabled ? ' is-active' : ''}`}
+                            aria-pressed={isMainLightEnabled}
+                            data-testid="control-light-main"
+                            onClick={() => setIsMainLightEnabled(!isMainLightEnabled)}
+                          >
+                            <span className="control-lighting-icon is-main" aria-hidden="true" />
+                            <span className="control-lighting-copy">
+                              <span className="control-lighting-title">Основной свет</span>
+                              <span className="control-lighting-state">{isMainLightEnabled ? 'Вкл' : 'Выкл'}</span>
+                            </span>
+                            <span className="control-lighting-switch" aria-hidden="true">
+                              <span className="control-lighting-switch-knob" />
+                              <span className="control-lighting-switch-mark">{isMainLightEnabled ? '+' : '-'}</span>
+                            </span>
+                            <span className="control-lighting-more" aria-hidden="true" />
+                          </button>
+
+                          <button
+                            type="button"
+                            className={`control-lighting-row control-subpanel${isToolheadLightEnabled ? ' is-active' : ''}`}
+                            aria-pressed={isToolheadLightEnabled}
+                            data-testid="control-light-toolhead"
+                            onClick={() => setIsToolheadLightEnabled(!isToolheadLightEnabled)}
+                          >
+                            <span className="control-lighting-icon is-toolhead" aria-hidden="true" />
+                            <span className="control-lighting-copy">
+                              <span className="control-lighting-title">Подсветка ПГ</span>
+                              <span className="control-lighting-state">{isToolheadLightEnabled ? 'Вкл' : 'Выкл'}</span>
+                            </span>
+                            <span className="control-lighting-switch" aria-hidden="true">
+                              <span className="control-lighting-switch-knob" />
+                              <span className="control-lighting-switch-mark">{isToolheadLightEnabled ? '+' : '-'}</span>
+                            </span>
+                            <span className="control-lighting-more" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </article>
                     ) : (
-                      <div className="joystick-panel">
-                        <div className="joystick-xy-control">
-                          <p className="joystick-axis-title">XY</p>
-                          <VirtualJoystick
-                            testId="axis-joystick"
-                            disabled={isBusy}
-                            onVectorChange={handleJoystickVectorChange}
-                          />
-                        </div>
-                        <div className="joystick-z-control">
-                          <p className="joystick-axis-title">Z</p>
-                          <VerticalAxisSlider
-                            value={printHeadPosition.z}
-                            min={HEAD_Z_BOUNDS_MM.min}
-                            max={HEAD_Z_BOUNDS_MM.max}
-                            step={1}
-                            onChange={handleJoystickZChange}
-                            minAtTop
-                            disabled={isBusy}
-                            testId="axis-z-slider"
-                          />
-                        </div>
-                        <div className="joystick-meta">
-                          <div className="joystick-meta-block">
-                            <p className="joystick-meta-label">Координаты</p>
-                            <p className="joystick-readout" data-testid="axis-coordinates">{axisCoordinatesLabel}</p>
+                      <div className="control-maintenance-grid">
+                        <section className="control-maintenance-metrics" aria-label="Сводка технического обслуживания">
+                          <article className="control-maintenance-panel control-maintenance-metric-card control-subpanel">
+                            <span className="control-maintenance-icon-box" aria-hidden="true">
+                              <MaintenanceLineIcon name="runtime" />
+                            </span>
+                            <p>
+                              <span>Пробег</span>
+                              <strong>{MAINTENANCE_STATUS.runtimeHours} <span>ч</span></strong>
+                            </p>
+                          </article>
+
+                          <article className="control-maintenance-panel control-maintenance-metric-card control-subpanel">
+                            <span className="control-maintenance-icon-box" aria-hidden="true">
+                              <MaintenanceLineIcon name="due" />
+                            </span>
+                            <p>
+                              <span>До Т.О</span>
+                              <strong>{MAINTENANCE_STATUS.hoursLeft} <span>ч</span></strong>
+                            </p>
+                          </article>
+
+                          <article className="control-maintenance-panel control-maintenance-metric-card control-subpanel">
+                            <span className="control-maintenance-icon-box" aria-hidden="true">
+                              <MaintenanceLineIcon name="interval" />
+                            </span>
+                            <p>
+                              <span>Интервал ТО</span>
+                              <strong>{MAINTENANCE_STATUS.intervalHours} <span>ч</span></strong>
+                            </p>
+                          </article>
+                        </section>
+
+                        <section
+                          className="control-maintenance-panel control-maintenance-progress-panel control-subpanel"
+                          aria-label="Прогресс межсервисного интервала"
+                          style={
+                            {
+                              '--maintenance-progress': `${maintenanceProgressPercent}%`,
+                            } as CSSProperties
+                          }
+                        >
+                          <h3>Прогресс межсервисного интервала</h3>
+                          <div className="control-maintenance-progress-ruler" aria-hidden="true">
+                            <span className="control-maintenance-progress-line" />
+                            <span className="control-maintenance-progress-fill" />
+                            <span className="control-maintenance-progress-marker">
+                              <span>{MAINTENANCE_STATUS.runtimeHours} ч</span>
+                            </span>
+                            <span className="control-maintenance-progress-ticks">
+                              {MAINTENANCE_PROGRESS_TICKS.map((tick) => (
+                                <span
+                                  key={tick}
+                                  className={tick === 0 || tick === 15 || tick === 30 ? 'is-major' : undefined}
+                                  style={
+                                    {
+                                      '--maintenance-tick-position': `${(tick / (MAINTENANCE_PROGRESS_TICKS.length - 1)) * 100}%`,
+                                    } as CSSProperties
+                                  }
+                                />
+                              ))}
+                            </span>
+                            <span className="control-maintenance-progress-labels">
+                              <span>0</span>
+                              <span>500</span>
+                              <span>{MAINTENANCE_STATUS.intervalHours} ч</span>
+                            </span>
                           </div>
-                          <div className="joystick-meta-block">
-                            <p className="joystick-meta-label">Скорость XY</p>
-                            <p className="joystick-readout">{joystickSpeedMmS.toFixed(1)} / 50 мм/с</p>
+                        </section>
+
+                        <aside className="control-maintenance-panel control-maintenance-checklist control-subpanel" aria-label="Чек-лист ТО">
+                          <h3>Чек-лист ТО</h3>
+                          <div className="control-maintenance-checklist-list">
+                            {MAINTENANCE_CHECKLIST_ITEMS.map((item) => {
+                              const isChecked = maintenanceChecklistState[item.id]
+
+                              return (
+                                <label
+                                  key={item.id}
+                                  className={`control-maintenance-check-row${isChecked ? ' is-checked' : ''}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(event) => {
+                                      setMaintenanceChecklistState((current) => ({
+                                        ...current,
+                                        [item.id]: event.currentTarget.checked,
+                                      }))
+                                    }}
+                                  />
+                                  <span className="control-maintenance-check-box" aria-hidden="true" />
+                                  <span className="control-maintenance-check-label">{item.label}</span>
+                                  <span className="control-maintenance-info-icon" aria-hidden="true">i</span>
+                                </label>
+                              )
+                            })}
                           </div>
+                          <button
+                            type="button"
+                            className="control-maintenance-complete-btn"
+                            onClick={() => setMaintenanceChecklistState(createMaintenanceChecklistState(true))}
+                            disabled={isMaintenanceChecklistComplete}
+                          >
+                            <span aria-hidden="true" />
+                            Отметить все выполненные
+                          </button>
+                        </aside>
+
+                        <div className="control-maintenance-bottom">
+                          <section className="control-maintenance-panel control-maintenance-history control-subpanel" aria-label="История ТО">
+                            <h3>История ТО</h3>
+                            {MAINTENANCE_HISTORY_ITEMS.map((item) => (
+                              <button key={item.id} type="button" className="control-maintenance-history-row control-subpanel">
+                                <span className="control-maintenance-history-dot" aria-hidden="true" />
+                                <span>#{item.id}</span>
+                                <span>{item.date}</span>
+                                <span>{item.runtimeHours} ч</span>
+                                <strong>{item.label}</strong>
+                                <IconMask name="utilityChevron" size={18} className="control-maintenance-chevron" />
+                              </button>
+                            ))}
+                          </section>
+
+                          <section className="control-maintenance-panel control-maintenance-next control-subpanel" aria-label="Следующее действие ТО">
+                            <h3>
+                              Следующее действие
+                              <span aria-hidden="true" />
+                            </h3>
+                            <button type="button" className="control-maintenance-next-row control-subpanel">
+                              <span className="control-maintenance-icon-box" aria-hidden="true">
+                                <MaintenanceLineIcon name="wrench" />
+                              </span>
+                              <span className="control-maintenance-next-copy">
+                                <strong>Плановое ТО</strong>
+                                <span>Рекомендуется через {MAINTENANCE_STATUS.hoursLeft} ч</span>
+                              </span>
+                              <IconMask name="utilityChevron" size={18} className="control-maintenance-chevron" />
+                            </button>
+                          </section>
                         </div>
                       </div>
                     )}
-                  </article>
+                  </div>
                 </div>
-
               </div>
             </section>
           ) : activeScreen === 'macros' ? (
@@ -3067,6 +3646,7 @@ function App() {
                       <header className="settings-group-head">
                         <h3>Карта стола</h3>
                         <p>Ручная и автоматическая калибровка плоскости стола.</p>
+                        <p data-testid="eddy-runtime-status">{eddyStatusLabel}</p>
                       </header>
 
                       {bedCalibrationStage === 'manual' ? (
@@ -3361,9 +3941,7 @@ function App() {
                             </p>
                           ))}
                           <p className="macros-bed-current" data-testid="macros-bed-current-point">
-                            {activeBedScrewPoint === null
-                              ? 'Текущая точка не выбрана.'
-                              : `Текущая: ${activeBedScrewPoint.label} | X ${formatAxisCoordinate(activeBedScrewPoint.xMm)} | Y ${formatAxisCoordinate(activeBedScrewPoint.yMm)}`}
+                            {activeBedScrewPointLabel}
                           </p>
                           {isBedScrewGuideDone ? (
                             <p className="macros-bed-complete">Проход завершён. Можно повторить калибровку для контроля.</p>
@@ -3469,10 +4047,11 @@ function App() {
                                 type="search"
                                 value={wifiSearchQuery}
                                 onChange={handleWifiSearchQueryChange}
-                                onFocus={handleWifiSearchInputFocus}
-                                onClick={handleWifiSearchInputFocus}
+                                onFocus={isNetworkCapabilityAvailable ? handleWifiSearchInputFocus : undefined}
+                                onClick={isNetworkCapabilityAvailable ? handleWifiSearchInputFocus : undefined}
                                 placeholder="Введите имя сети"
                                 data-testid="settings-network-search"
+                                disabled={!isNetworkCapabilityAvailable}
                               />
                             </label>
                             <button
@@ -3480,6 +4059,7 @@ function App() {
                               className="settings-network-btn settings-network-btn-primary"
                               onClick={handleWifiScan}
                               data-testid="settings-network-scan"
+                              disabled={!isNetworkCapabilityAvailable}
                             >
                               Поиск
                             </button>
@@ -3495,6 +4075,7 @@ function App() {
                                   aria-pressed={selectedWifiNetworkId === network.id}
                                   onClick={() => handleWifiNetworkSelect(network.id)}
                                   data-testid={`settings-network-item-${network.id}`}
+                                  disabled={!isNetworkCapabilityAvailable}
                                 >
                                   <div className="settings-network-item-copy">
                                     <strong>{network.ssid}</strong>
@@ -3531,16 +4112,18 @@ function App() {
                                       type={isWifiPasswordVisible ? 'text' : 'password'}
                                       value={wifiPasswordValue}
                                       onChange={handleWifiPasswordChange}
-                                      onFocus={handleWifiPasswordInputFocus}
-                                      onClick={handleWifiPasswordInputFocus}
+                                      onFocus={isNetworkCapabilityAvailable ? handleWifiPasswordInputFocus : undefined}
+                                      onClick={isNetworkCapabilityAvailable ? handleWifiPasswordInputFocus : undefined}
                                       placeholder="Введите пароль"
                                       data-testid="settings-network-password-input"
+                                      disabled={!isNetworkCapabilityAvailable}
                                     />
                                     <button
                                       type="button"
                                       className="settings-network-btn"
                                       onClick={handleWifiPasswordVisibilityToggle}
                                       data-testid="settings-network-password-visibility"
+                                      disabled={!isNetworkCapabilityAvailable}
                                     >
                                       {isWifiPasswordVisible ? 'Скрыть' : 'Показать'}
                                     </button>
@@ -3556,6 +4139,7 @@ function App() {
                                   className="settings-network-btn settings-network-btn-primary"
                                   onClick={handleWifiConnect}
                                   data-testid="settings-network-connect-button"
+                                  disabled={!isNetworkCapabilityAvailable}
                                 >
                                   Подключить
                                 </button>
@@ -3564,6 +4148,7 @@ function App() {
                                   className="settings-network-btn"
                                   onClick={handleWifiForgetSelected}
                                   data-testid="settings-network-forget-button"
+                                  disabled={!isNetworkCapabilityAvailable}
                                 >
                                   Забыть сеть
                                 </button>
@@ -3575,7 +4160,9 @@ function App() {
                               </article>
 
                               <p className="settings-network-notice" data-testid="settings-network-notice">
-                                {wifiConnectionNotice.length > 0 ? wifiConnectionNotice : 'Выберите сеть и выполните подключение.'}
+                                {isNetworkCapabilityAvailable && wifiConnectionNotice.length > 0
+                                  ? wifiConnectionNotice
+                                  : networkCapabilityNotice}
                               </p>
                             </>
                           ) : (
@@ -3626,6 +4213,7 @@ function App() {
                           className="settings-network-btn settings-network-btn-primary"
                           onClick={handleCloudConnectionToggle}
                           data-testid="settings-cloud-connect-toggle"
+                          disabled={!isCloudCapabilityAvailable}
                         >
                           {isCloudConnected ? 'Отключить облако' : 'Подключить облако'}
                         </button>
@@ -3635,13 +4223,14 @@ function App() {
                         checked={isCloudAiMonitoringEnabled}
                         onChange={handleCloudAiMonitoringToggle}
                         testId="settings-cloud-ai-toggle"
+                        disabled={!isCloudCapabilityAvailable}
                       />
                       <article className="settings-description-card">
                         <p><span>Статус</span><strong>{isCloudConnected ? 'Подключено' : 'Не подключено'}</strong></p>
                         <p><span>Сервис</span><strong>TreeD Cloud Guard</strong></p>
                         <p><span>Режим AI</span><strong>{isCloudAiMonitoringEnabled ? 'Включен' : 'Выключен'}</strong></p>
                       </article>
-                      <p className="settings-cloud-notice">{cloudConnectionNotice}</p>
+                      <p className="settings-cloud-notice">{cloudCapabilityNotice}</p>
                     </div>
                   ) : activeSettingsGroup === 'device' ? (
                     <div className="settings-group-stack">
@@ -3671,12 +4260,12 @@ function App() {
                           className="settings-network-btn settings-network-btn-primary"
                           onClick={handleCheckUpdates}
                           data-testid="settings-check-updates-button"
-                          disabled={isCheckingUpdates}
+                          disabled={isCheckingUpdates || !isUpdatesCapabilityAvailable}
                         >
                           {isCheckingUpdates ? 'Проверка...' : 'Проверить обновления'}
                         </button>
                       </div>
-                      <p className="settings-cloud-notice">{updateNotice}</p>
+                      <p className="settings-cloud-notice">{updateCapabilityNotice}</p>
                     </div>
                   ) : activeSettingsGroup === 'language' ? (
                     <div className="settings-group-stack">
@@ -3801,7 +4390,9 @@ function App() {
             </section>
           ) : (
             <section className="screen-placeholder" data-testid={`screen-${activeScreen}`}>
-              <p className="screen-placeholder-body">{SCREEN_PLACEHOLDERS[activeScreen].description}</p>
+              <p className="screen-placeholder-body">
+                {SCREEN_PLACEHOLDERS[activeScreen as keyof typeof SCREEN_PLACEHOLDERS]?.description ?? ''}
+              </p>
             </section>
           )}
         </div>
@@ -3819,12 +4410,12 @@ function App() {
               icon={item.icon}
               active={item.id === activeScreen}
               aria-current={item.id === activeScreen ? 'page' : undefined}
-              onClick={() => setActiveScreen(item.id)}
+              onClick={() => handleScreenSelect(item.id)}
             />
           ))}
         </nav>
 
-        {activeKeyboardTarget !== null ? (
+        {activeKeyboardTarget !== null && activeKeyboardTarget !== 'idleNotes' ? (
           <div
             className="app-virtual-keyboard-layer"
             role="presentation"
@@ -4020,7 +4611,7 @@ function App() {
                   className="file-modal-action"
                   data-testid="print-file-start-button"
                   onClick={() => void handleStartSelectedFile()}
-                  disabled={isBusy}
+                  disabled={isBusy || printStartBlockReason !== null}
                 >
                   {pendingCommand === 'start' ? 'Запуск...' : 'Старт печати'}
                 </button>
@@ -4151,28 +4742,39 @@ function App() {
                       <dd>{cloudStatusLabel}</dd>
                     </div>
                   </dl>
-                  <a
-                    className="top-popup-qr-link"
-                    href={CLOUD_LINK_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Открыть treed.pro для добавления устройства"
-                  >
-                    <img
-                      className="top-popup-qr-image"
-                      src={CLOUD_QR_IMAGE_URL}
-                      alt="QR-код для перехода на treed.pro"
-                    />
-                    <span>Сканируйте QR или откройте treed.pro</span>
-                  </a>
+                  {isCloudCapabilityAvailable ? (
+                    <a
+                      className="top-popup-qr-link"
+                      href={CLOUD_LINK_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Открыть treed.pro для добавления устройства"
+                    >
+                      <img
+                        className="top-popup-qr-image"
+                        src={CLOUD_QR_IMAGE_URL}
+                        alt="QR-код для перехода на treed.pro"
+                      />
+                      <span>Сканируйте QR или откройте treed.pro</span>
+                    </a>
+                  ) : (
+                    <p className="top-popup-secondary">{cloudCapabilityNotice}</p>
+                  )}
                 </div>
               ) : null}
 
               {activeTopPopup === 'notifications' ? (
                 <div className="top-popup-content">
-                  <p className="top-popup-note">Последнее сообщение от принтера:</p>
+                  <p className="top-popup-note">Уведомления принтера:</p>
                   <ul className="top-popup-list">
-                    <li>{snapshot.message}</li>
+                    {commandError ? <li>{commandError}</li> : null}
+                    {currentPrinterNotification !== null ? (
+                      <li>
+                        <strong>{currentPrinterNotification.title}</strong>
+                        {currentPrinterNotification.details ? `: ${currentPrinterNotification.details}` : ''}
+                      </li>
+                    ) : null}
+                    {commandError || currentPrinterNotification !== null ? null : <li>Новых уведомлений нет.</li>}
                   </ul>
                   <p className="top-popup-secondary">Новые системные уведомления будут добавляться в этот список.</p>
                 </div>
@@ -4181,12 +4783,22 @@ function App() {
               {activeTopPopup === 'power' ? (
                 <div className="top-popup-content">
                   <p className="top-popup-warning">
-                    Выключение принтера остановит текущую задачу и потребует ручного запуска питания.
+                    Перезапуск сервисов может прервать печать. Host-действия используйте только когда нужен полный restart устройства.
                   </p>
-                  <div className="top-popup-actions">
-                    <button type="button" className="top-popup-action top-popup-action-danger" onClick={handlePowerShutdownPlaceholder}>
-                      Выключить принтер
-                    </button>
+                  <div className="top-popup-actions top-popup-power-actions">
+                    {powerMenuActions.map((action) => (
+                      <button
+                        key={action.command}
+                        type="button"
+                        className={`top-popup-action ${action.tone === 'danger' ? 'top-popup-action-danger' : ''}`}
+                        onClick={() => void handlePowerMenuAction(action.command)}
+                        disabled={isBusy}
+                        aria-disabled={action.blockReason !== null || isBusy}
+                        title={action.blockReason ?? action.details}
+                      >
+                        {armedPowerCommand === action.command ? `Подтвердить: ${action.label}` : action.label}
+                      </button>
+                    ))}
                     <button type="button" className="top-popup-action" onClick={closeTopPopup}>
                       Отмена
                     </button>

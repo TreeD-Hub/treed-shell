@@ -1,33 +1,40 @@
 import { moonrakerUrl } from '../../config'
+import {
+  normalizeMoonrakerRuntimeSnapshot,
+  type MoonrakerObjectsQueryPayload,
+  type MoonrakerPrintFileInput,
+  type MoonrakerPrintFileMetadata,
+} from './moonrakerNormalizer'
+import { subscribeToMoonrakerStatus } from './moonrakerWebSocketClient'
+import { MOONRAKER_RUNTIME_OBJECTS } from './moonrakerRuntimeObjects'
 import type { PrinterSnapshot, TransportClient } from './types'
 
 type MoonrakerResponse<T> = {
   result?: T
 }
 
-type PrinterInfoResult = {
-  state?: string
+type NormalizeMoonrakerSnapshotInput = {
+  source?: 'mock' | 'live'
+  moonrakerUrl?: string
+  nowIso?: string
+  info?: {
+    state?: string
+  }
+  objects?: MoonrakerObjectsQueryPayload
+  files?: MoonrakerPrintFileInput[]
+  fileMetadata?: Record<string, MoonrakerPrintFileMetadata>
 }
 
-type ObjectsQueryResult = {
-  status?: {
-    toolhead?: {
-      position?: [number, number, number]
-    }
-    extruder?: {
-      temperature?: number
-    }
-    heater_bed?: {
-      temperature?: number
-    }
-    fan?: {
-      speed?: number
-    }
-    print_stats?: {
-      state?: string
-    }
-  }
+type MoonrakerFileListItem = {
+  path?: string
+  filename?: string
+  modified?: number
+  size?: number
 }
+
+export const MOONRAKER_RUNTIME_OBJECTS_QUERY = `/printer/objects/query?${MOONRAKER_RUNTIME_OBJECTS
+  .map((objectName) => encodeURIComponent(objectName))
+  .join('&')}`
 
 async function fetchMoonraker<T>(path: string): Promise<T> {
   const response = await fetch(`${moonrakerUrl}${path}`)
@@ -45,41 +52,85 @@ async function fetchMoonraker<T>(path: string): Promise<T> {
   return payload.result
 }
 
+function getMoonrakerFilePath(item: MoonrakerFileListItem): string {
+  return item.path ?? item.filename ?? ''
+}
+
+async function fetchPrintFileWithMetadata(item: MoonrakerFileListItem): Promise<MoonrakerPrintFileInput> {
+  const path = getMoonrakerFilePath(item)
+
+  if (!path.toLowerCase().endsWith('.gcode')) {
+    return item
+  }
+
+  try {
+    const metadata = await fetchMoonraker<MoonrakerPrintFileMetadata>(
+      `/server/files/metadata?filename=${encodeURIComponent(path)}`,
+    )
+
+    return {
+      ...item,
+      path,
+      metadata,
+    }
+  } catch {
+    return {
+      ...item,
+      path,
+    }
+  }
+}
+
+async function fetchPrintFiles(): Promise<MoonrakerPrintFileInput[]> {
+  const items = await fetchMoonraker<MoonrakerFileListItem[]>('/server/files/list?root=gcodes')
+
+  return Promise.all(items.map(fetchPrintFileWithMetadata))
+}
+
+export function normalizeMoonrakerSnapshot(input: NormalizeMoonrakerSnapshotInput): PrinterSnapshot {
+  const status = input.objects?.status ?? {}
+  const files = (input.files ?? []).map((file) => {
+    const path = getMoonrakerFilePath(file)
+
+    return {
+      ...file,
+      path,
+      metadata: file.metadata ?? input.fileMetadata?.[path],
+    }
+  })
+
+  return normalizeMoonrakerRuntimeSnapshot(
+    {
+      ...input.objects,
+      status: {
+        ...status,
+        webhooks: {
+          state: input.objects?.status?.webhooks?.state ?? input.info?.state,
+          state_message: input.objects?.status?.webhooks?.state_message,
+        },
+      },
+    },
+    {
+      source: input.source ?? 'live',
+      moonrakerUrl: input.moonrakerUrl,
+      nowIso: input.nowIso,
+      printFiles: files,
+    },
+  )
+}
+
 export function createMoonrakerClient(): TransportClient {
   return {
     async fetchSnapshot(): Promise<PrinterSnapshot> {
-      const endpointHost = (() => {
-        try {
-          return new URL(moonrakerUrl).hostname || 'unknown'
-        } catch {
-          return 'unknown'
-        }
-      })()
-      const [info, objects] = await Promise.all([
-        fetchMoonraker<PrinterInfoResult>('/printer/info'),
-        fetchMoonraker<ObjectsQueryResult>(
-          '/printer/objects/query?toolhead&extruder&heater_bed&fan&print_stats',
-        ),
+      const [objects, printFiles] = await Promise.all([
+        fetchMoonraker<MoonrakerObjectsQueryPayload>(MOONRAKER_RUNTIME_OBJECTS_QUERY),
+        fetchPrintFiles(),
       ])
 
-      const state = objects.status?.print_stats?.state ?? info.state ?? 'unknown'
-      const toolheadPosition = objects.status?.toolhead?.position ?? [0, 0, 0]
-
-      return {
-        source: 'live',
-        connection: 'online',
-        wifiSsid: 'Moonraker Network',
-        ipAddress: endpointHost,
-        state,
-        toolheadX: Number(toolheadPosition[0] ?? 0),
-        toolheadY: Number(toolheadPosition[1] ?? 0),
-        toolheadZ: Number(toolheadPosition[2] ?? 0),
-        extruderTemp: Number(objects.status?.extruder?.temperature ?? 0),
-        bedTemp: Number(objects.status?.heater_bed?.temperature ?? 0),
-        modelFanPercent: Math.max(0, Math.min(100, Number(objects.status?.fan?.speed ?? 0) * 100)),
-        updatedAt: new Date().toISOString(),
-        message: `Moonraker: ${moonrakerUrl}`,
-      }
+      return normalizeMoonrakerRuntimeSnapshot(objects, { moonrakerUrl, source: 'live', printFiles })
+    },
+    subscribe(handlers) {
+      return subscribeToMoonrakerStatus(handlers, { moonrakerUrl })
     },
   }
 }

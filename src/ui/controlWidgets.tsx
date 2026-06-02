@@ -66,18 +66,20 @@ export function SegmentedToggle<T extends string>({
 
 type AxisCrossControlsProps = {
   onMove: (axis: AxisId, direction: -1 | 1) => void
+  onFilamentMove?: (direction: -1 | 1) => void
   disabled?: boolean
   className?: string
 }
 
 export function AxisCrossControls({
   onMove,
+  onFilamentMove,
   disabled = false,
   className,
 }: AxisCrossControlsProps) {
   return (
-    <div className={joinClassNames('axis-cross-layout', className)} role="group" aria-label="Крестовина перемещения">
-      <div className="axis-cross-group">
+    <div className={joinClassNames('axis-cross-layout', className)} role="group" aria-label="Кнопки перемещения по осям">
+      <div className="axis-cross-group axis-cross-group-xy control-subpanel control-subpanel-compact control-subpanel-stack" role="group" aria-label="Подблок осей X и Y">
         <p className="axis-cross-title">XY</p>
         <div className="axis-cross-xy">
           <span className="axis-cross-spacer" aria-hidden="true" />
@@ -88,7 +90,7 @@ export function AxisCrossControls({
             onClick={() => onMove('Y', 1)}
             disabled={disabled}
           >
-            ↑
+            <span className="axis-cross-arrow" aria-hidden="true">↑</span>
           </button>
           <span className="axis-cross-spacer" aria-hidden="true" />
 
@@ -99,9 +101,11 @@ export function AxisCrossControls({
             onClick={() => onMove('X', -1)}
             disabled={disabled}
           >
-            ←
+            <span className="axis-cross-arrow" aria-hidden="true">←</span>
           </button>
-          <span className="axis-cross-center" aria-hidden="true" />
+          <span className="axis-cross-center" aria-hidden="true">
+            <span className="axis-cross-center-core" />
+          </span>
           <button
             type="button"
             className="axis-cross-btn"
@@ -109,7 +113,7 @@ export function AxisCrossControls({
             onClick={() => onMove('X', 1)}
             disabled={disabled}
           >
-            →
+            <span className="axis-cross-arrow" aria-hidden="true">→</span>
           </button>
 
           <span className="axis-cross-spacer" aria-hidden="true" />
@@ -120,33 +124,61 @@ export function AxisCrossControls({
             onClick={() => onMove('Y', -1)}
             disabled={disabled}
           >
-            ↓
+            <span className="axis-cross-arrow" aria-hidden="true">↓</span>
           </button>
           <span className="axis-cross-spacer" aria-hidden="true" />
         </div>
       </div>
 
-      <div className="axis-cross-group axis-cross-group-z">
+      <div className="axis-cross-group axis-cross-group-z control-subpanel control-subpanel-compact control-subpanel-stack" role="group" aria-label="Подблок оси Z">
         <p className="axis-cross-title">Z</p>
         <div className="axis-cross-z">
           <button
             type="button"
-            className="axis-cross-btn"
+            className="axis-cross-btn axis-cross-btn-labeled"
             aria-label="Сдвиг Z в плюс"
             onClick={() => onMove('Z', 1)}
             disabled={disabled}
           >
-            ↑
+            <span className="axis-cross-arrow" aria-hidden="true">↑</span>
+            <span className="axis-cross-btn-label">Вверх</span>
           </button>
           <span className="axis-cross-spacer" aria-hidden="true" />
           <button
             type="button"
-            className="axis-cross-btn"
+            className="axis-cross-btn axis-cross-btn-labeled"
             aria-label="Сдвиг Z в минус"
             onClick={() => onMove('Z', -1)}
             disabled={disabled}
           >
-            ↓
+            <span className="axis-cross-arrow" aria-hidden="true">↓</span>
+            <span className="axis-cross-btn-label">Вниз</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="axis-cross-group axis-cross-group-e control-subpanel control-subpanel-compact control-subpanel-stack" role="group" aria-label="Подблок экструдера E">
+        <p className="axis-cross-title">E</p>
+        <div className="axis-cross-e">
+          <button
+            type="button"
+            className="axis-cross-btn axis-cross-btn-labeled"
+            aria-label="Выгрузить филамент"
+            onClick={() => onFilamentMove?.(1)}
+            disabled={disabled}
+          >
+            <span className="axis-cross-arrow" aria-hidden="true">↑</span>
+            <span className="axis-cross-btn-label">Выгрузить</span>
+          </button>
+          <button
+            type="button"
+            className="axis-cross-btn axis-cross-btn-labeled"
+            aria-label="Загрузить филамент"
+            onClick={() => onFilamentMove?.(-1)}
+            disabled={disabled}
+          >
+            <span className="axis-cross-arrow" aria-hidden="true">↓</span>
+            <span className="axis-cross-btn-label">Загрузить</span>
           </button>
         </div>
       </div>
@@ -310,6 +342,8 @@ function clampSliderValue(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
+const HORIZONTAL_SLIDER_EDGE_INSET_PX = 20
+
 export function VerticalAxisSlider({
   value,
   min,
@@ -464,8 +498,10 @@ export function HorizontalSteppedSlider({
     }
 
     const bounds = trackElement.getBoundingClientRect()
-    const clampedX = clampSliderValue(clientX, bounds.left, bounds.right)
-    const ratio = (clampedX - bounds.left) / Math.max(1, bounds.width)
+    const interactionLeft = bounds.left + HORIZONTAL_SLIDER_EDGE_INSET_PX
+    const interactionRight = bounds.right - HORIZONTAL_SLIDER_EDGE_INSET_PX
+    const clampedX = clampSliderValue(clientX, interactionLeft, interactionRight)
+    const ratio = (clampedX - interactionLeft) / Math.max(1, interactionRight - interactionLeft)
     const rawValue = min + (ratio * (normalizedMax - min))
     return snapToStep(rawValue, min, normalizedMax, step)
   }
@@ -537,6 +573,11 @@ export function HorizontalSteppedSlider({
           <span
             key={`fan-tick-${index}`}
             className={index % 4 === 0 ? 'is-major' : undefined}
+            style={
+              {
+                '--fan-slider-tick-position': `${rulerTicksCount > 1 ? (index / (rulerTicksCount - 1)) * 100 : 0}%`,
+              } as CSSProperties
+            }
           />
         ))}
       </div>

@@ -42,14 +42,55 @@ test('shell frame matches 960x544 contract', async ({ page }) => {
   expect(box?.height).toBe(544)
 })
 
-test('captures screenshot and validates layout geometry', async ({ page }, testInfo) => {
+test('shell exposes nothing terminal visual contract', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByText('TreeD Принтер')).toBeVisible()
 
   const shell = page.getByTestId('screen-shell')
   await expect(shell).toBeVisible()
 
-  const topBar = page.locator('.top-bar')
+  const contract = await page.evaluate(() => {
+    const root = document.documentElement
+    const shellElement = document.querySelector<HTMLElement>('.screen-shell')
+    const topBar = document.querySelector<HTMLElement>('.top-bar')
+    const statusLogo = document.querySelector<HTMLElement>('.dashboard-status-logo')
+    const navItem = document.querySelector<HTMLElement>('.nav-item.is-active')
+    const powerButton = document.querySelector<HTMLElement>('.power-btn')
+
+    return {
+      fontFamily: getComputedStyle(root).fontFamily,
+      primary: getComputedStyle(root).getPropertyValue('--color-primary').trim(),
+      shellBackground: shellElement ? getComputedStyle(shellElement).backgroundImage : '',
+      hasTopBar: topBar !== null,
+      statusLogoFont: statusLogo ? getComputedStyle(statusLogo).fontFamily : '',
+      activeNavRadius: navItem ? Number.parseFloat(getComputedStyle(navItem).borderRadius) : -1,
+      powerRadius: powerButton ? Number.parseFloat(getComputedStyle(powerButton).borderRadius) : -1,
+      activeNavBorder: navItem ? getComputedStyle(navItem).borderColor : '',
+      activeNavDot: navItem ? getComputedStyle(navItem, '::after').backgroundColor : '',
+    }
+  })
+
+  expect(contract.fontFamily).toContain('Cascadia Mono')
+  expect(contract.primary).toBe('#ff2a2a')
+  expect(contract.shellBackground).toContain('radial-gradient')
+  expect(contract.hasTopBar).toBe(false)
+  expect(contract.statusLogoFont).toContain('Cascadia Mono')
+  expect(contract.activeNavRadius).toBeLessThanOrEqual(8)
+  expect(contract.powerRadius).toBeLessThanOrEqual(8)
+  expect(contract.activeNavBorder).toBe('rgb(244, 244, 240)')
+  expect(contract.activeNavDot).toBe('rgb(255, 42, 42)')
+})
+
+test('captures screenshot and validates layout geometry', async ({ page }, testInfo) => {
+  await page.goto('/')
+  await expect(page.getByText('TreeD')).toBeVisible()
+  await page.getByRole('button', { name: 'Файлы' }).click()
+  await page.getByTestId('print-file-card').first().click()
+  await page.getByTestId('print-file-start-button').click()
+  await expect(page.getByTestId('print-tune-group-progress')).toBeVisible()
+
+  const shell = page.getByTestId('screen-shell')
+  await expect(shell).toBeVisible()
+
   const contentGrid = page.locator('.content-grid')
   const bottomNav = page.locator('.bottom-nav')
 
@@ -61,7 +102,6 @@ test('captures screenshot and validates layout geometry', async ({ page }, testI
 
   const [
     shellRectRaw,
-    topBarRectRaw,
     contentGridRectRaw,
     bottomNavRectRaw,
     jobCardRectRaw,
@@ -71,7 +111,6 @@ test('captures screenshot and validates layout geometry', async ({ page }, testI
     zoffsetCardRectRaw,
   ] = await Promise.all([
     shell.boundingBox(),
-    topBar.boundingBox(),
     contentGrid.boundingBox(),
     bottomNav.boundingBox(),
     jobCard.boundingBox(),
@@ -82,7 +121,6 @@ test('captures screenshot and validates layout geometry', async ({ page }, testI
   ])
 
   const shellRect = requireRect(shellRectRaw, 'shell')
-  const topBarRect = requireRect(topBarRectRaw, 'top-bar')
   const contentGridRect = requireRect(contentGridRectRaw, 'content-grid')
   const bottomNavRect = requireRect(bottomNavRectRaw, 'bottom-nav')
   const jobCardRect = requireRect(jobCardRectRaw, 'job-card')
@@ -91,8 +129,8 @@ test('captures screenshot and validates layout geometry', async ({ page }, testI
   const processCardRect = requireRect(processCardRectRaw, 'process-card')
   const zoffsetCardRect = requireRect(zoffsetCardRectRaw, 'zoffset-card')
 
-  expect(topBarRect.y).toBeGreaterThanOrEqual(shellRect.y)
-  expect(contentGridRect.y).toBeGreaterThanOrEqual(topBarRect.y + topBarRect.height - 1)
+  await expect(page.locator('.top-bar')).toHaveCount(0)
+  expect(contentGridRect.y).toBeGreaterThanOrEqual(shellRect.y)
   expect(bottomNavRect.y).toBeGreaterThanOrEqual(contentGridRect.y + contentGridRect.height - 1)
 
   expect(isInsideRect(contentGridRect, jobCardRect)).toBeTruthy()

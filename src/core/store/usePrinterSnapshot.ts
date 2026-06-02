@@ -3,25 +3,33 @@ import { dataMode } from '../../config'
 import { createMockClient } from '../transport/mockClient'
 import { createMoonrakerClient } from '../transport/moonrakerClient'
 import type { PrinterSnapshot } from '../transport/types'
+import {
+  setPrinterSnapshot,
+  updatePrinterSnapshot,
+  usePrinterStoreSelector,
+} from './printerStore'
 
-const FALLBACK_SNAPSHOT: PrinterSnapshot = {
-  source: dataMode,
-  connection: 'offline',
-  wifiSsid: 'Не подключено',
-  ipAddress: '—',
-  state: 'unknown',
-  toolheadX: 0,
-  toolheadY: 0,
-  toolheadZ: 0,
-  extruderTemp: 0,
-  bedTemp: 0,
-  modelFanPercent: 0,
-  updatedAt: new Date(0).toISOString(),
-  message: 'Ожидание данных...',
+const LIVE_HTTP_FALLBACK_INTERVAL_MS = 30_000
+
+const selectPrinterSnapshot = (snapshot: PrinterSnapshot) => snapshot
+
+function mergeWebSocketSnapshot(previous: PrinterSnapshot, next: PrinterSnapshot): PrinterSnapshot {
+  return {
+    ...next,
+    printFiles: next.printFiles.length > 0 ? next.printFiles : previous.printFiles,
+  }
+}
+
+function getFailureConnection(previous: PrinterSnapshot): PrinterSnapshot['connection'] {
+  if (previous.connection === 'shutdown') {
+    return 'shutdown'
+  }
+
+  return previous.connection === 'offline' ? 'offline' : 'reconnecting'
 }
 
 export function usePrinterSnapshot(pollIntervalMs = 2_000) {
-  const [snapshot, setSnapshot] = useState<PrinterSnapshot>(FALLBACK_SNAPSHOT)
+  const snapshot = usePrinterStoreSelector(selectPrinterSnapshot)
   const [error, setError] = useState<string>('')
 
   const client = useMemo(() => {
@@ -31,13 +39,14 @@ export function usePrinterSnapshot(pollIntervalMs = 2_000) {
   const refresh = useCallback(async () => {
     try {
       const nextSnapshot = await client.fetchSnapshot()
-      setSnapshot(nextSnapshot)
+      setPrinterSnapshot(nextSnapshot)
       setError('')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
-      setSnapshot((prev) => ({
+      updatePrinterSnapshot((prev) => ({
         ...prev,
-        connection: 'offline',
+        connection: getFailureConnection(prev),
+        message: `Ошибка связи: ${message}`,
         updatedAt: new Date().toISOString(),
       }))
       setError(message)
@@ -45,19 +54,63 @@ export function usePrinterSnapshot(pollIntervalMs = 2_000) {
   }, [client])
 
   useEffect(() => {
+    let isDisposed = false
+    const fallbackIntervalMs = client.subscribe === undefined
+      ? pollIntervalMs
+      : Math.max(pollIntervalMs, LIVE_HTTP_FALLBACK_INTERVAL_MS)
+    const subscription = client.subscribe?.({
+      onSnapshot(nextSnapshot) {
+        if (isDisposed) {
+          return
+        }
+
+        updatePrinterSnapshot((prev) => mergeWebSocketSnapshot(prev, nextSnapshot))
+        setError('')
+      },
+      onConnectionChange(connection, message) {
+        if (isDisposed) {
+          return
+        }
+
+        updatePrinterSnapshot((prev) => ({
+          ...prev,
+          connection,
+          message: message ?? prev.message,
+          updatedAt: new Date().toISOString(),
+        }))
+      },
+      onError(message) {
+        if (isDisposed) {
+          return
+        }
+
+        setError(message)
+      },
+    })
+
+    if (client.subscribe !== undefined) {
+      updatePrinterSnapshot((prev) => ({
+        ...prev,
+        connection: prev.connection === 'online' ? prev.connection : 'connecting',
+        updatedAt: new Date().toISOString(),
+      }))
+    }
+
     const firstTick = window.setTimeout(() => {
       void refresh()
     }, 0)
 
     const timer = window.setInterval(() => {
       void refresh()
-    }, pollIntervalMs)
+    }, fallbackIntervalMs)
 
     return () => {
+      isDisposed = true
+      subscription?.close()
       window.clearTimeout(firstTick)
       window.clearInterval(timer)
     }
-  }, [pollIntervalMs, refresh])
+  }, [client, pollIntervalMs, refresh])
 
   return {
     snapshot,

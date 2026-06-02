@@ -6,11 +6,10 @@ describe('App', () => {
     render(<App />)
 
     expect(screen.getByTestId('screen-shell')).toBeInTheDocument()
-    expect(screen.getByText('TreeD Принтер')).toBeInTheDocument()
-    await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Ожидание печати')
-    })
+    expect(screen.getByText('TreeD')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Статус Wi-Fi' })).toBeInTheDocument()
     expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
+    expect(screen.getByText(/Экосистема/i)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Ожидание печати' })).not.toBeInTheDocument()
     const idleNotesInput = screen.getByTestId('idle-notes-input') as HTMLTextAreaElement
     expect(idleNotesInput.value.length).toBeGreaterThan(0)
@@ -39,7 +38,7 @@ describe('App', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByRole('button', { name: 'Стоп' })).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Стоп' }))
@@ -47,7 +46,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('print-cancel-confirm-button'))
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Ожидание печати')
+      expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
     })
     expect(screen.getByTestId('screen-dashboard-idle')).toBeInTheDocument()
   })
@@ -60,7 +59,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('print-file-start-button'))
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByRole('button', { name: 'Стоп' })).toBeInTheDocument()
     })
 
     const actionButtons = screen.getAllByRole('button')
@@ -74,7 +73,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Пауза' }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Пауза')
+      expect(screen.getByRole('button', { name: 'Продолжить' })).toBeInTheDocument()
     })
 
     const resumeActionButton = screen.getByRole('button', { name: 'Продолжить' })
@@ -85,7 +84,7 @@ describe('App', () => {
     fireEvent.click(resumeActionButton)
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByRole('button', { name: 'Пауза' })).toBeInTheDocument()
     })
   })
 
@@ -97,7 +96,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('print-file-start-button'))
 
     await waitFor(() => {
-      expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+      expect(screen.getByTestId('print-tune-group-nozzle')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByTestId('print-tune-group-nozzle'))
@@ -126,7 +125,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Файлы' }))
 
     expect(screen.getByTestId('screen-files')).toBeInTheDocument()
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Файлы')
+    expect(screen.queryByRole('button', { name: 'Статус Wi-Fi' })).not.toBeInTheDocument()
     expect(screen.getByText('Прокрутите вниз, чтобы найти нужную модель.')).toBeInTheDocument()
     expect(screen.queryByText(/Экран файлов подключен в каркас маршрутизации/i)).not.toBeInTheDocument()
     expect(screen.getAllByTestId('print-file-card')).toHaveLength(12)
@@ -146,33 +145,78 @@ describe('App', () => {
     expect(screen.getByText('34 г')).toBeInTheDocument()
   })
 
-  it('renders control widgets and switches parking mode to specific axis', () => {
+  it('renders control widgets and switches parking mode to specific axis', async () => {
     render(<App />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
 
     expect(screen.getByTestId('screen-control')).toBeInTheDocument()
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Управление')
+    expect(screen.queryByRole('button', { name: 'Статус Wi-Fi' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('control-group-movement')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('control-menu-mode-toggle')).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(screen.getByTestId('control-menu-mode-toggle'))
+    expect(screen.getByTestId('control-menu-mode-toggle')).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(screen.getByTestId('control-menu-mode-toggle'))
+    expect(screen.getByTestId('control-menu-mode-toggle')).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Перемещение')
     expect(screen.getByRole('heading', { name: 'Парковка' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Сервисный режим' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Управление обдувом' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Перемещение по осям' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Парковка по всем осям' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Сервисный режим' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Подсветка' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Оси' })).toBeInTheDocument()
+    expect(screen.queryByTestId('parking-action-button')).not.toBeInTheDocument()
+    expect(screen.getByTestId('service-mode-button')).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'Отключить моторы' })).toBeInTheDocument()
-    expect(screen.getByTestId('model-fan-slider')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Загрузить филамент' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Выгрузить филамент' })).toBeInTheDocument()
 
     const parkingAllButton = screen.getByTestId('parking-mode-all')
-    const parkingAxisButton = screen.getByTestId('parking-mode-axis')
+    const parkingAxisXButton = screen.getByTestId('parking-axis-X')
 
-    expect(parkingAllButton).toHaveAttribute('aria-pressed', 'true')
-    expect(parkingAxisButton).toHaveAttribute('aria-pressed', 'false')
+    expect(parkingAllButton).toHaveAttribute('aria-pressed', 'false')
+    expect(parkingAxisXButton).toHaveAttribute('aria-pressed', 'false')
 
-    fireEvent.click(parkingAxisButton)
+    fireEvent.click(parkingAxisXButton)
 
-    expect(parkingAxisButton).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByTestId('parking-axis-X')).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Парковка оси X' })).toBeInTheDocument()
+    expect(parkingAllButton).toHaveAttribute('aria-pressed', 'false')
+    expect(parkingAxisXButton).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: 'Парковка оси X' })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(parkingAxisXButton).toHaveAttribute('aria-pressed', 'false')
+    }, { timeout: 1500 })
 
+    const serviceModeButton = screen.getByTestId('service-mode-button')
+    fireEvent.click(serviceModeButton)
+    expect(serviceModeButton).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => {
+      expect(serviceModeButton).toHaveAttribute('aria-pressed', 'false')
+    }, { timeout: 1500 })
+
+    fireEvent.click(screen.getByTestId('control-group-heating'))
+    expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Нагрев')
+    expect(screen.getByRole('heading', { name: 'Сопло' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Стол' })).toBeInTheDocument()
+    expect(screen.getByTestId('control-heating-nozzle-input')).toBeInTheDocument()
+    expect(screen.getByTestId('control-heating-bed-input')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('control-group-fans'))
+    expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Вентиляторы')
+    expect(screen.getByRole('heading', { name: 'Обдув модели' })).toBeInTheDocument()
+    expect(screen.getByTestId('control-fan-slider')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('control-group-lighting'))
+    expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Освещение')
+    expect(screen.getByRole('heading', { name: 'Подсветка' })).toBeInTheDocument()
+    expect(screen.getByTestId('control-light-main')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('control-light-toolhead')).toHaveAttribute('aria-pressed', 'false')
+    const mainLightButton = screen.getByTestId('control-light-main')
+    fireEvent.click(mainLightButton)
+    expect(mainLightButton).toHaveAttribute('aria-pressed', 'true')
+
+    const toolheadLightButton = screen.getByTestId('control-light-toolhead')
+    fireEvent.click(toolheadLightButton)
+    expect(toolheadLightButton).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByTestId('control-group-movement'))
     const moveButtonsMode = screen.getByTestId('move-mode-buttons')
     const moveJoystickMode = screen.getByTestId('move-mode-joystick')
 
@@ -205,7 +249,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Макросы' }))
 
     expect(screen.getByTestId('screen-macros')).toBeInTheDocument()
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Макросы')
+    expect(screen.queryByRole('button', { name: 'Статус Wi-Fi' })).not.toBeInTheDocument()
     expect(screen.getByTestId('macros-zoffset-value')).toHaveTextContent('-0.080')
 
     fireEvent.click(screen.getByTestId('macros-zoffset-plus'))
@@ -314,7 +358,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('print-file-modal')).not.toBeInTheDocument()
     })
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Печать')
+    expect(screen.getByTestId('print-tune-group-progress')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Файлы' }))
     fireEvent.click(screen.getAllByTestId('print-file-card')[0])
@@ -345,30 +389,22 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Перейти в настройки Wi-Fi' }))
 
     expect(screen.getByTestId('screen-settings')).toBeInTheDocument()
-    expect(screen.getByTestId('top-bar-screen-label')).toHaveTextContent('Настройки')
+    expect(screen.queryByRole('button', { name: 'Статус Wi-Fi' })).not.toBeInTheDocument()
     expect(screen.getByTestId('settings-group-network')).toHaveAttribute('aria-pressed', 'true')
     const wifiSearchInput = screen.getByTestId('settings-network-search') as HTMLInputElement
+    expect(wifiSearchInput).toBeDisabled()
     fireEvent.focus(wifiSearchInput)
-    expect(screen.getByTestId('settings-wifi-search-keyboard')).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('settings-keyboard-layer'))
+    expect(screen.queryByTestId('settings-wifi-search-keyboard')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('settings-keyboard-layer')).not.toBeInTheDocument()
     expect(screen.queryByTestId('settings-wifi-search-keyboard')).not.toBeInTheDocument()
 
-    fireEvent.change(wifiSearchInput, { target: { value: 'Office' } })
-    fireEvent.click(screen.getByTestId('settings-network-item-office-main-5g'))
-    const wifiPasswordInput = screen.getByTestId('settings-network-password-input') as HTMLInputElement
-    fireEvent.change(wifiPasswordInput, { target: { value: '12345678' } })
-    fireEvent.focus(wifiPasswordInput)
-    expect(screen.getByTestId('settings-wifi-keyboard')).toBeInTheDocument()
-    expect(screen.getByTestId('settings-keyboard-layer')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Символ q/i }))
-    expect(wifiPasswordInput.value).toBe('12345678q')
-    expect(screen.getByTestId('settings-wifi-keyboard-preview')).toHaveTextContent('12345678q')
-    fireEvent.click(screen.getByTestId('settings-keyboard-layer'))
-    expect(screen.queryByTestId('settings-wifi-keyboard')).not.toBeInTheDocument()
+    expect(screen.getByTestId('settings-network-scan')).toBeDisabled()
+    expect(screen.getByTestId('settings-network-item-office-main-5g')).toBeDisabled()
+    expect(screen.getByTestId('settings-network-connect-button')).toBeDisabled()
+    expect(screen.getByTestId('settings-network-forget-button')).toBeDisabled()
+    expect(screen.getByTestId('settings-network-notice')).toHaveTextContent('Wi-Fi capability не подтвержден')
     expect(screen.queryByText('Текущая сеть')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('settings-network-connect-button'))
-    expect(screen.getByTestId('settings-network-notice')).toHaveTextContent('Подключено к Office_Main_5G.')
-    expect(wifiButton).not.toHaveClass('is-active')
+    expect(screen.queryByTestId('top-popup-wifi')).not.toBeInTheDocument()
   })
 
   it('renders extended settings sections and handles interactions', () => {
@@ -397,18 +433,19 @@ describe('App', () => {
     expect(screen.getByText('Печать завершена')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('settings-group-cloud'))
-    fireEvent.click(screen.getByTestId('settings-cloud-connect-toggle'))
-    fireEvent.click(screen.getByTestId('settings-cloud-ai-toggle'))
-    expect(screen.getByText('Подключение к сервису AI-контроля ошибок активно.')).toBeInTheDocument()
-    expect(screen.getByText('Включен')).toBeInTheDocument()
+    expect(screen.getByTestId('settings-cloud-connect-toggle')).toBeDisabled()
+    expect(screen.getByTestId('settings-cloud-ai-toggle')).toBeDisabled()
+    expect(screen.getByText(/cloud capability не подтвержден/i)).toBeInTheDocument()
+    expect(screen.getByText('Выключен')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('settings-group-device'))
     expect(screen.getByRole('heading', { name: 'Об устройстве' })).toBeInTheDocument()
-    expect(screen.getByText('TreeD Shell Controller')).toBeInTheDocument()
+    expect(screen.getByText('Rock Pi / Armbian Debian 12')).toBeInTheDocument()
+    expect(screen.getByText('Octopus Pro CAN')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('settings-group-updates'))
-    fireEvent.click(screen.getByTestId('settings-check-updates-button'))
-    expect(screen.getByText('Доступна версия 0.1.1.')).toBeInTheDocument()
+    expect(screen.getByTestId('settings-check-updates-button')).toBeDisabled()
+    expect(screen.getByText(/update capability не подтвержден/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('settings-group-console'))
     const consoleInput = screen.getByTestId('settings-console-input') as HTMLTextAreaElement
@@ -424,7 +461,7 @@ describe('App', () => {
     expect(screen.getByText('G28', { selector: 'strong' })).toBeInTheDocument()
   })
 
-  it('shows cloud connectivity status and QR redirect to treed.pro', () => {
+  it('shows disabled cloud capability state instead of QR redirect', () => {
     render(<App />)
 
     const cloudButton = screen.getByRole('button', { name: 'Статус облака' })
@@ -432,21 +469,19 @@ describe('App', () => {
 
     expect(screen.getByRole('dialog', { name: 'Состояние облака' })).toBeInTheDocument()
     expect(cloudButton).toHaveClass('is-active')
-    expect(screen.getByText(/В сети|Не в сети/)).toBeInTheDocument()
+    expect(screen.getByText('Недоступно')).toBeInTheDocument()
+    expect(screen.getByText(/cloud capability не подтвержден/i)).toBeInTheDocument()
 
-    const redirectLink = screen.getByRole('link', { name: 'Открыть treed.pro для добавления устройства' })
-    expect(redirectLink.getAttribute('href')).toContain('https://treed.pro')
+    expect(screen.queryByRole('link', { name: 'Открыть treed.pro для добавления устройства' })).not.toBeInTheDocument()
   })
 
-  it('shows placeholder response in power popup', () => {
+  it('shows disabled power capability state in power popup', () => {
     render(<App />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Питание' }))
 
     expect(screen.getByRole('dialog', { name: 'Выключение принтера' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Выключить принтер' }))
-
-    expect(screen.getByText('Команда выключения пока не подключена к backend.')).toBeInTheDocument()
+    expect(screen.getByText(/machine power capability не подтвержден/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Выключить принтер' })).toBeDisabled()
   })
 })
