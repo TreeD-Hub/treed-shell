@@ -1,6 +1,6 @@
 # AGENTS.md - рабочий стандарт для `treed-shell`
 Пишем только LF/UTF-8!
-## 1. Область работы.
+## 1. Область работы
 
 Ты работаешь только с репозиторием `treed-shell`.
 
@@ -182,6 +182,22 @@
 - менять поведение fallback на `KlipperScreen`;
 - вводить новые обязательные env-переменные без обновления документации;
 - убирать или обходить обязательные шаги интеграции.
+
+### 7.3.1. UI release workflow для loader
+- Release workflow находится в `.github/workflows/release-ui.yml`.
+- Штатный триггер workflow: `push` в ветку `main`; также доступен ручной запуск через `workflow_dispatch`.
+- Workflow собирает только frontend UI bundle для принтерного loader, а не Tauri bundle и не установку репозитория.
+- Команда сборки: `npm run build:ui:printer`, то есть `tsc -b && vite build --mode live`.
+- Артефакт релиза: zip-архив `treed-shell-ui.zip` с содержимым `dist/**`.
+- Перед упаковкой workflow добавляет в `dist/treed-shell-ui-manifest.json` метаданные сборки: имя bundle, режим `live`, branch/ref, commit SHA, run number, run attempt и время сборки.
+- GitHub Release создается с тегом формата `ui-main-<run_number>-<run_attempt>`.
+- Внешний loader на принтере должен забирать готовый asset `treed-shell-ui.zip` из GitHub Release и раскладывать его в runtime-место UI.
+
+Нельзя без явной задачи:
+- превращать release workflow в установщик системного runtime;
+- публиковать mock-сборку как production UI для printer loader;
+- менять имя asset `treed-shell-ui.zip`, формат manifest или схему release tag без синхронизации с loader;
+- смешивать этот UI bundle workflow с Tauri desktop/mobile bundle.
 
 ### 7.4. UI и дизайн-система
 - Основной UI-слой: `src/ui/**`.

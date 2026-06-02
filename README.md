@@ -43,6 +43,24 @@ npm run tauri:build:printer
 
 Этот профиль использует `src-tauri/tauri.printer.conf.json`: фиксированное окно `960x544`, без системной рамки, live-mode через `.env.live` и подключение к Moonraker на `http://127.0.0.1:7125`.
 
+## UI release для printer loader
+
+Release workflow находится в `.github/workflows/release-ui.yml`.
+
+Поведение:
+
+- запускается при `push` в ветку `main`;
+- также может быть запущен вручную через `workflow_dispatch`;
+- выполняет `npm ci`;
+- собирает printer UI командой `npm run build:ui:printer`;
+- команда `build:ui:printer` выполняет `tsc -b && vite build --mode live`;
+- добавляет manifest `dist/treed-shell-ui-manifest.json` с commit/run metadata;
+- пакует содержимое `dist/**` в `treed-shell-ui.zip`;
+- создает GitHub Release с тегом `ui-main-<run_number>-<run_attempt>`;
+- прикладывает к release asset `treed-shell-ui.zip`.
+
+Этот release предназначен для внешнего loader на принтере: loader скачивает готовый `treed-shell-ui.zip` из GitHub Release и раскладывает UI в runtime-место. Workflow не устанавливает репозиторий на принтер и не собирает Tauri bundle.
+
 ## Режимы данных
 
 - `mock` — локальные данные без Moonraker (режим по умолчанию).
