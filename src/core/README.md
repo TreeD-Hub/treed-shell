@@ -5,8 +5,10 @@
 Подсистемы:
 - `transport/` — адаптеры получения данных принтера;
 - `store/` — реактивное состояние интерфейса;
-- `commands/` — выполнение команд (`start/pause/resume/cancel/home`).
+- `commands/` — выполнение команд и локальная обвязка hooks/client.
 
 Контракт:
 - источник данных выбирается режимом `mock|live`;
 - ошибки транспорта и команд поднимаются в UI явно.
+- общие типы команд, capabilities и причины блокировки команд берутся из `@treed/printer-logic`;
+- transport, polling/WebSocket, Tauri runtime и Moonraker-клиенты остаются локальными для `treed-shell`.

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
+    "@treed/printer-logic": "git+file:///C:/Users/TreeD/Documents/GitHub/treed-printer-logic#v0.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

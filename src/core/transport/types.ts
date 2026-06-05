@@ -1,12 +1,16 @@
-export type PrinterSource = 'mock' | 'live'
+import type {
+  PrinterCapabilitiesSnapshot,
+  PrinterConnectionState,
+  PrinterEddyStatus,
+} from '@treed/printer-logic'
 
-export type PrinterConnectionState =
-  | 'connecting'
-  | 'online'
-  | 'degraded'
-  | 'reconnecting'
-  | 'offline'
-  | 'shutdown'
+export type {
+  PrinterCapabilitiesSnapshot,
+  PrinterConnectionState,
+  PrinterEddyStatus,
+} from '@treed/printer-logic'
+
+export type PrinterSource = 'mock' | 'live'
 
 export interface PrinterHardwareSnapshot {
   marker: 'treed-v2'
@@ -17,25 +21,6 @@ export interface PrinterHardwareSnapshot {
   probe: string
   model: string
   revision: string | null
-}
-
-export interface PrinterCapabilitiesSnapshot {
-  print: boolean
-  motion: boolean
-  thermal: boolean
-  fan: boolean
-  filament: boolean
-  console: boolean
-  eddy: boolean
-  shaper: boolean
-  motionTest: boolean
-  power: boolean
-  network: boolean
-  cloud: boolean
-  updates: boolean
-  systemPower: boolean
-  camera: boolean
-  serviceCommands: boolean
 }
 
 export interface PrinterPositionSnapshot {
@@ -105,8 +90,6 @@ export interface PrinterToolheadRuntimeSnapshot {
   homedAxes: string
   coordinateMode: 'raw'
 }
-
-export type PrinterEddyStatus = 'unknown' | 'ready' | 'uncalibrated' | 'requires_xy_home'
 
 export interface PrinterV2Snapshot {
   branch: 'treed-v2'

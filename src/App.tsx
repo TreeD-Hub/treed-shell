@@ -36,7 +36,6 @@ import {
 } from './control'
 import {
   HorizontalSteppedSlider,
-  IconMask,
   NavItemButton,
   PrintFileCard,
   PrintPreviewIcon,
