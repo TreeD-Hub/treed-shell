@@ -1,7 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import App from './App'
 import { getPrinterSnapshot, setPrinterSnapshot } from './core/store/printerStore'
-import { clearMockCommandFailure, setMockCommandFailure } from '../mocks/runtime'
+import { clearMockCommandFailure, createMockSnapshot, setMockCommandFailure } from '../mocks/runtime'
+
+beforeEach(() => {
+  act(() => {
+    setPrinterSnapshot(createMockSnapshot())
+  })
+})
 
 afterEach(() => {
   clearMockCommandFailure()
@@ -142,7 +148,7 @@ describe('App', () => {
     expect(screen.getAllByTestId('print-file-card')).toHaveLength(12)
 
     const sortByNameButton = screen.getByRole('button', { name: 'По имени' })
-    const sortByAddedAtButton = screen.getByRole('button', { name: 'По добавлению' })
+    const sortByAddedAtButton = screen.getByRole('button', { name: 'По дате' })
 
     expect(sortByNameButton).toHaveAttribute('aria-pressed', 'true')
     expect(sortByAddedAtButton).toHaveAttribute('aria-pressed', 'false')
@@ -670,8 +676,8 @@ describe('App', () => {
     expect(consoleInput.value).toBe('G28')
 
     fireEvent.click(screen.getByTestId('settings-console-send-button'))
-    expect(screen.getByTestId('settings-console-notice')).toHaveTextContent('capability «консоль G-code» не подтвержден')
-    expect(screen.queryByText('G28', { selector: 'strong' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('settings-console-notice')).toHaveTextContent('Команда отправлена: G28')
+    expect(screen.getByText('G28', { selector: 'strong' })).toBeInTheDocument()
   })
 
   it('shows disabled cloud capability state instead of QR redirect', () => {

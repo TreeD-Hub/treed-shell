@@ -17,8 +17,6 @@ import {
   QUICK_METRIC_DEFINITIONS,
   type ScreenId,
   TEMPERATURE_METRIC_DEFINITIONS,
-  TOP_STATUS_BUTTONS,
-  type TopStatusButtonId,
 } from './dashboard/config'
 import { usePrinterDisplayStatus } from './dashboard/usePrinterDisplayStatus'
 import {
@@ -57,22 +55,13 @@ import {
   useSettingsController,
   type SettingsKeyboardTarget,
 } from './settings'
+import { TopStatusPopups, useTopStatusController } from './shell'
 import { PRINT_FILE_LIBRARY, type PrintFileItem } from './printFiles'
 import type { PrinterConnectionState } from './core/transport/types'
 import treeDLogoAsset from './assets/logo_treeD-28.svg'
 import './App.css'
 
 const DEFAULT_SCREEN: ScreenId = 'dashboard'
-const CLOUD_LINK_URL = 'https://treed.pro'
-const CLOUD_QR_IMAGE_URL = 'https://api.qrserver.com/v1/create-qr-code/?size=144x144&data=https%3A%2F%2Ftreed.pro'
-const TOP_POPUP_MAX_WIDTH = 360
-const TOP_POPUP_GAP = 8
-const TOP_POPUP_SIDE_PADDING = 8
-const TOP_POPUP_ARROW_EDGE = 18
-const FALLBACK_SCREEN_WIDTH = 960
-const TOP_BAR_BUTTON_SIZE = 56
-const TOP_BAR_BUTTON_GAP = 8
-const TOP_BAR_RIGHT_PADDING = 24
 const IDLE_WIDGET_DRAG_HOLD_MS = 3000
 const PRINT_CANCEL_MODAL_TITLE_ID = 'print-cancel-modal-title'
 const PRINT_TUNE_MODAL_TITLE_ID = 'print-tune-modal-title'
@@ -92,51 +81,6 @@ type BedScrewPoint = {
   yMm: number
   mapX: number
   mapY: number
-}
-const TOP_BAR_POPUP_TITLES: Record<TopStatusButtonId, string> = {
-  wifi: 'Состояние Wi-Fi',
-  cloud: 'Состояние облака',
-  notifications: 'Уведомления',
-  power: 'Питание и перезапуск',
-}
-const POWER_MENU_ACTIONS: Array<{
-  command: Extract<PrinterCommandId, 'shutdownHost' | 'rebootHost' | 'restartKlipper' | 'firmwareRestart' | 'restartMoonraker'>
-  label: string
-  details: string
-  tone?: 'default' | 'danger'
-}> = [
-  {
-    command: 'restartKlipper',
-    label: 'Restart Klipper',
-    details: 'Перезапустить Klipper без перезагрузки host.',
-  },
-  {
-    command: 'firmwareRestart',
-    label: 'Firmware restart',
-    details: 'Перезапустить прошивки MCU через Klipper.',
-  },
-  {
-    command: 'restartMoonraker',
-    label: 'Restart Moonraker',
-    details: 'Перезапустить Moonraker API.',
-  },
-  {
-    command: 'rebootHost',
-    label: 'Перезагрузить host',
-    details: 'Полная перезагрузка Linux-хоста принтера.',
-    tone: 'danger',
-  },
-  {
-    command: 'shutdownHost',
-    label: 'Выключить host',
-    details: 'Остановить host. Для включения может потребоваться физический доступ.',
-    tone: 'danger',
-  },
-]
-type TopPopupPosition = {
-  top: number
-  left: number
-  arrowLeft: number
 }
 
 const PRINT_TUNE_GROUP_META: Record<PrintTuneGroupId, { label: string; note: string }> = {
@@ -293,17 +237,6 @@ function shiftTimeLabelByMinutes(timeLabel: string, offsetMinutes: number): stri
   return `${nextHours}:${nextMinutes}`
 }
 
-function resolveFallbackAnchorCenterX(id: TopStatusButtonId, screenWidth: number): number {
-  const buttonIndex = TOP_STATUS_BUTTONS.findIndex((item) => item.id === id)
-  const buttonsFromRight = TOP_STATUS_BUTTONS.length - 1 - Math.max(0, buttonIndex)
-  return (
-    screenWidth -
-    TOP_BAR_RIGHT_PADDING -
-    (TOP_BAR_BUTTON_SIZE / 2) -
-    (buttonsFromRight * (TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_GAP))
-  )
-}
-
 const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard' | 'files' | 'settings'>, { title: string; description: string }> = {
   control: {
     title: 'Управление',
@@ -318,18 +251,7 @@ const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard' | 'files' | 'set
 function App() {
   const { snapshot, refresh } = usePrinterSnapshot()
   const screenShellRef = useRef<HTMLElement | null>(null)
-  const topButtonRefs = useRef<Record<TopStatusButtonId, HTMLButtonElement | null>>({
-    wifi: null,
-    cloud: null,
-    notifications: null,
-    power: null,
-  })
   const [babystepStep, setBabystepStep] = useState<number>(BABYSTEP_STEP_OPTIONS[1])
-  const [activeTopPopup, setActiveTopPopup] = useState<TopStatusButtonId | null>(null)
-  const [lastReadPrinterNotificationId, setLastReadPrinterNotificationId] = useState<string | null>(null)
-  const [powerPopupNotice, setPowerPopupNotice] = useState<string>('')
-  const [armedPowerCommand, setArmedPowerCommand] = useState<PrinterCommandId | null>(null)
-  const [topPopupPosition, setTopPopupPosition] = useState<TopPopupPosition | null>(null)
   const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
   const [filesLibrary, setFilesLibrary] = useState<PrintFileItem[]>(() => [...PRINT_FILE_LIBRARY])
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
@@ -496,10 +418,6 @@ function App() {
   const wifiSsidLabel = isRuntimeCurrent ? snapshot.wifiSsid : 'Не подключено'
   const wifiIpLabel = isRuntimeCurrent ? snapshot.ipAddress : '—'
   const isCloudCapabilityAvailable = snapshot.capabilities.cloud
-  const powerMenuActions = POWER_MENU_ACTIONS.map((action) => ({
-    ...action,
-    blockReason: getCommandBlockReason(action.command),
-  }))
   const settingsController = useSettingsController({
     snapshot,
     connectionLabel,
@@ -539,9 +457,20 @@ function App() {
   const printerDisplayStatus = usePrinterDisplayStatus()
   const currentPrinterNotification = printerDisplayStatus.notification
   const currentPrinterNotificationId = currentPrinterNotification?.id ?? null
-  const hasUnreadPrinterNotification =
-    currentPrinterNotificationId !== null &&
-    currentPrinterNotificationId !== lastReadPrinterNotificationId
+  const topStatusController = useTopStatusController({
+    screenShellRef,
+    activeScreen,
+    currentPrinterNotificationId,
+    isBusy,
+    executeCommand,
+    getCommandBlockReason,
+    requiresCommandConfirmation,
+    refresh,
+  })
+  const hasUnreadPrinterNotification = topStatusController.hasUnreadPrinterNotification
+  const closeTopPopup = topStatusController.closeTopPopup
+  const openTopPopup = topStatusController.openTopPopup
+  const setTopButtonRef = topStatusController.setTopButtonRef
   const printPauseCommand = isPrintPaused ? 'resume' : 'pause'
   const printPauseBlockReason = getCommandBlockReason(printPauseCommand)
   const printCancelBlockReason = getCommandBlockReason('cancel')
@@ -701,61 +630,6 @@ function App() {
       testIdPrefix: 'control-heating-bed',
     },
   ]
-
-  const closeTopPopup = useCallback(() => {
-    setActiveTopPopup(null)
-    setTopPopupPosition(null)
-  }, [])
-
-  const resolveTopPopupPosition = useCallback((id: TopStatusButtonId): TopPopupPosition => {
-    const shellElement = screenShellRef.current
-    const anchorButton = topButtonRefs.current[id]
-    const shellRect = shellElement?.getBoundingClientRect()
-    const anchorRect = anchorButton?.getBoundingClientRect()
-    const shellWidth = shellRect && shellRect.width > 0 ? shellRect.width : FALLBACK_SCREEN_WIDTH
-    const popupWidth = Math.min(TOP_POPUP_MAX_WIDTH, shellWidth - (TOP_POPUP_SIDE_PADDING * 2))
-
-    const anchorCenterX =
-      shellRect && anchorRect && shellRect.width > 0 && anchorRect.width > 0
-        ? anchorRect.left - shellRect.left + (anchorRect.width / 2)
-        : resolveFallbackAnchorCenterX(id, shellWidth)
-    const anchorBottomY =
-      shellRect && anchorRect && shellRect.height > 0 && anchorRect.height > 0
-        ? anchorRect.bottom - shellRect.top
-        : 0
-
-    let left = anchorCenterX - (popupWidth / 2)
-    left = Math.max(TOP_POPUP_SIDE_PADDING, Math.min(left, shellWidth - popupWidth - TOP_POPUP_SIDE_PADDING))
-
-    const arrowLeft = Math.max(
-      TOP_POPUP_ARROW_EDGE,
-      Math.min(anchorCenterX - left, popupWidth - TOP_POPUP_ARROW_EDGE),
-    )
-
-    return {
-      top: Math.max(TOP_POPUP_GAP, anchorBottomY + TOP_POPUP_GAP),
-      left,
-      arrowLeft,
-    }
-  }, [])
-
-  const openTopPopup = useCallback(
-    (id: TopStatusButtonId) => {
-      if (activeTopPopup === id) {
-        closeTopPopup()
-        return
-      }
-      setPowerPopupNotice('')
-      setArmedPowerCommand(null)
-      setTopPopupPosition(resolveTopPopupPosition(id))
-      setActiveTopPopup(id)
-    },
-    [activeTopPopup, closeTopPopup, resolveTopPopupPosition],
-  )
-
-  const setTopButtonRef = useCallback((id: TopStatusButtonId, node: HTMLButtonElement | null): void => {
-    topButtonRefs.current[id] = node
-  }, [])
 
   const openWifiSettings = useCallback(() => {
     setActiveSettingsGroup('network')
@@ -1246,47 +1120,6 @@ function App() {
   const handleIdleNotesVirtualKey = handleVirtualKeyboardKey
 
   useEffect(() => {
-    if (activeScreen !== 'dashboard' && activeTopPopup !== null) {
-      closeTopPopup()
-    }
-  }, [activeScreen, activeTopPopup, closeTopPopup])
-
-  useEffect(() => {
-    if (activeTopPopup === 'notifications' && currentPrinterNotificationId !== null) {
-      setLastReadPrinterNotificationId(currentPrinterNotificationId)
-    }
-  }, [activeTopPopup, currentPrinterNotificationId])
-
-  useEffect(() => {
-    if (currentPrinterNotificationId === null && lastReadPrinterNotificationId !== null) {
-      setLastReadPrinterNotificationId(null)
-    }
-  }, [currentPrinterNotificationId, lastReadPrinterNotificationId])
-
-  useEffect(() => {
-    if (activeTopPopup === null || typeof window === 'undefined') {
-      return
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeTopPopup()
-      }
-    }
-
-    const handleResize = () => {
-      setTopPopupPosition(resolveTopPopupPosition(activeTopPopup))
-    }
-
-    window.addEventListener('keydown', handleEscape)
-    window.addEventListener('resize', handleResize)
-    return () => {
-      window.removeEventListener('keydown', handleEscape)
-      window.removeEventListener('resize', handleResize)
-    }
-  }, [activeTopPopup, closeTopPopup, resolveTopPopupPosition])
-
-  useEffect(() => {
     if (selectedFileId === null || typeof window === 'undefined') {
       return
     }
@@ -1374,30 +1207,6 @@ function App() {
       closeFileModal()
     }
   }, [activeScreen, closeFileModal, selectedFileId])
-
-  async function handlePowerMenuAction(command: (typeof POWER_MENU_ACTIONS)[number]['command']): Promise<void> {
-    const action = POWER_MENU_ACTIONS.find((item) => item.command === command)
-    const blockReason = getCommandBlockReason(command)
-
-    if (blockReason !== null) {
-      setPowerPopupNotice(blockReason)
-      setArmedPowerCommand(null)
-      return
-    }
-
-    if (requiresCommandConfirmation(command) && armedPowerCommand !== command) {
-      setArmedPowerCommand(command)
-      setPowerPopupNotice(`Подтвердите действие повторным нажатием: ${action?.label ?? command}.`)
-      return
-    }
-
-    const ok = await executeCommand({ command })
-    setArmedPowerCommand(null)
-    if (ok) {
-      setPowerPopupNotice(`Команда отправлена: ${action?.label ?? command}.`)
-      void refresh()
-    }
-  }
 
   async function handlePause(): Promise<void> {
     const nextCommand = printPauseCommand
@@ -2225,7 +2034,7 @@ function App() {
 
   const dashboardStatusDock = (
     <DashboardStatusDock
-      activeTopPopup={activeTopPopup}
+      activeTopPopup={topStatusController.activeTopPopup}
       hasUnreadPrinterNotification={hasUnreadPrinterNotification}
       onOpenTopPopup={openTopPopup}
       onButtonRef={setTopButtonRef}
@@ -3000,135 +2809,26 @@ function App() {
           </div>
         ) : null}
 
-        {activeTopPopup !== null ? (
-          <div className="top-popup-layer" role="presentation" onClick={closeTopPopup}>
-            <section
-              className="top-popup-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="top-popup-title"
-              data-testid={`top-popup-${activeTopPopup}`}
-              style={
-                topPopupPosition
-                  ? ({
-                      top: `${topPopupPosition.top}px`,
-                      left: `${topPopupPosition.left}px`,
-                      '--top-popup-arrow-left': `${topPopupPosition.arrowLeft}px`,
-                    } as CSSProperties)
-                  : undefined
-              }
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="top-popup-head">
-                <h2 id="top-popup-title">{TOP_BAR_POPUP_TITLES[activeTopPopup]}</h2>
-                <button type="button" className="top-popup-close" aria-label="Закрыть окно" onClick={closeTopPopup}>
-                  ×
-                </button>
-              </header>
-
-              {activeTopPopup === 'wifi' ? (
-                <div className="top-popup-content">
-                  <dl className="top-popup-kv">
-                    <div>
-                      <dt>Статус сети</dt>
-                      <dd>{connectionLabel}</dd>
-                    </div>
-                    <div>
-                      <dt>Wi-Fi сеть</dt>
-                      <dd>{wifiSsidLabel}</dd>
-                    </div>
-                    <div>
-                      <dt>IP адрес</dt>
-                      <dd>{wifiIpLabel}</dd>
-                    </div>
-                    <div>
-                      <dt>Время</dt>
-                      <dd>{formattedSnapshotTime}</dd>
-                    </div>
-                  </dl>
-                  <div className="top-popup-actions">
-                    <button type="button" className="top-popup-action" onClick={openWifiSettings}>
-                      Перейти в настройки Wi-Fi
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {activeTopPopup === 'cloud' ? (
-                <div className="top-popup-content">
-                  <dl className="top-popup-kv">
-                    <div>
-                      <dt>Состояние</dt>
-                      <dd>{cloudStatusLabel}</dd>
-                    </div>
-                  </dl>
-                  {isCloudCapabilityAvailable ? (
-                    <a
-                      className="top-popup-qr-link"
-                      href={CLOUD_LINK_URL}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label="Открыть treed.pro для добавления устройства"
-                    >
-                      <img
-                        className="top-popup-qr-image"
-                        src={CLOUD_QR_IMAGE_URL}
-                        alt="QR-код для перехода на treed.pro"
-                      />
-                      <span>Сканируйте QR или откройте treed.pro</span>
-                    </a>
-                  ) : (
-                    <p className="top-popup-secondary">{cloudCapabilityNotice}</p>
-                  )}
-                </div>
-              ) : null}
-
-              {activeTopPopup === 'notifications' ? (
-                <div className="top-popup-content">
-                  <p className="top-popup-note">Уведомления принтера:</p>
-                  <ul className="top-popup-list">
-                    {commandError ? <li>{commandError}</li> : null}
-                    {currentPrinterNotification !== null ? (
-                      <li>
-                        <strong>{currentPrinterNotification.title}</strong>
-                        {currentPrinterNotification.details ? `: ${currentPrinterNotification.details}` : ''}
-                      </li>
-                    ) : null}
-                    {commandError || currentPrinterNotification !== null ? null : <li>Новых уведомлений нет.</li>}
-                  </ul>
-                  <p className="top-popup-secondary">Новые системные уведомления будут добавляться в этот список.</p>
-                </div>
-              ) : null}
-
-              {activeTopPopup === 'power' ? (
-                <div className="top-popup-content">
-                  <p className="top-popup-warning">
-                    Перезапуск сервисов может прервать печать. Host-действия используйте только когда нужен полный restart устройства.
-                  </p>
-                  <div className="top-popup-actions top-popup-power-actions">
-                    {powerMenuActions.map((action) => (
-                      <button
-                        key={action.command}
-                        type="button"
-                        className={`top-popup-action ${action.tone === 'danger' ? 'top-popup-action-danger' : ''}`}
-                        onClick={() => void handlePowerMenuAction(action.command)}
-                        disabled={isBusy}
-                        aria-disabled={action.blockReason !== null || isBusy}
-                        title={action.blockReason ?? action.details}
-                      >
-                        {armedPowerCommand === action.command ? `Подтвердить: ${action.label}` : action.label}
-                      </button>
-                    ))}
-                    <button type="button" className="top-popup-action" onClick={closeTopPopup}>
-                      Отмена
-                    </button>
-                  </div>
-                  {powerPopupNotice ? <p className="top-popup-secondary">{powerPopupNotice}</p> : null}
-                </div>
-              ) : null}
-            </section>
-          </div>
-        ) : null}
+        <TopStatusPopups
+          activeTopPopup={topStatusController.activeTopPopup}
+          topPopupPosition={topStatusController.topPopupPosition}
+          connectionLabel={connectionLabel}
+          wifiSsidLabel={wifiSsidLabel}
+          wifiIpLabel={wifiIpLabel}
+          formattedSnapshotTime={formattedSnapshotTime}
+          cloudStatusLabel={cloudStatusLabel}
+          isCloudCapabilityAvailable={isCloudCapabilityAvailable}
+          cloudCapabilityNotice={cloudCapabilityNotice}
+          commandError={commandError}
+          currentPrinterNotification={currentPrinterNotification}
+          powerMenuActions={topStatusController.powerMenuActions}
+          powerPopupNotice={topStatusController.powerPopupNotice}
+          armedPowerCommand={topStatusController.armedPowerCommand}
+          isBusy={isBusy}
+          onClose={closeTopPopup}
+          onOpenWifiSettings={openWifiSettings}
+          onPowerMenuAction={topStatusController.onPowerMenuAction}
+        />
       </section>
     </main>
   )

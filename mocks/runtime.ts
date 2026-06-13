@@ -82,7 +82,7 @@ export function clearMockCommandFailure(): void {
   mockCommandFailure = null
 }
 
-function createMockSnapshot(): PrinterSnapshot {
+export function createMockSnapshot(): PrinterSnapshot {
   return {
     source: 'mock',
     connection: 'online',
