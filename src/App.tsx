@@ -2825,6 +2825,7 @@ function App() {
               }}
             />
           ) : activeScreen === 'macros' ? (
+            // Temporary screen: macros will be rewritten after verifying treed-mainshellOS macro/runtime contracts.
             <section className="macros-screen" data-testid="screen-macros">
               <div className="settings-layout macros-layout">
                 <aside className="settings-menu-shell macros-menu-shell">
