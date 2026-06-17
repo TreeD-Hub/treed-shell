@@ -213,4 +213,27 @@ describe('TREE_D_COMMAND_CATALOG', () => {
       distanceMm: 1,
     })).toContain('во время печати')
   })
+
+  it('allows confirmed host power and service commands during active print', () => {
+    expect(getTreeDCommandBlockReason('rebootHost', PRINTING_CONTEXT)).toBeNull()
+    expect(getTreeDCommandBlockReason('shutdownHost', PRINTING_CONTEXT)).toBeNull()
+    expect(getTreeDCommandBlockReason('restartKlipper', PRINTING_CONTEXT)).toBeNull()
+    expect(getTreeDCommandBlockReason('firmwareRestart', PRINTING_CONTEXT)).toBeNull()
+    expect(getTreeDCommandBlockReason('restartMoonraker', PRINTING_CONTEXT)).toBeNull()
+
+    expect(getTreeDCommandBlockReason('rebootHost', {
+      ...PRINTING_CONTEXT,
+      capabilities: {
+        ...ALL_CAPABILITIES,
+        power: false,
+      },
+    })).toContain('capability')
+    expect(getTreeDCommandBlockReason('restartKlipper', {
+      ...PRINTING_CONTEXT,
+      capabilities: {
+        ...ALL_CAPABILITIES,
+        serviceCommands: false,
+      },
+    })).toContain('capability')
+  })
 })

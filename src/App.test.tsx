@@ -731,4 +731,55 @@ describe('App', () => {
     expect(shutdownHostButton).toHaveAttribute('aria-disabled', 'true')
     expect(shutdownHostButton).toHaveAttribute('title', 'Выключение host: capability «питание host» не подтвержден.')
   })
+
+  it('requires repeated confirm before enabled power and service commands execute', async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(getPrinterSnapshot().connection).toBe('online')
+    })
+
+    const enableSystemCapabilities = () => {
+      const snapshot = getPrinterSnapshot()
+      act(() => {
+        setPrinterSnapshot({
+          ...snapshot,
+          capabilities: {
+            ...snapshot.capabilities,
+            power: true,
+            serviceCommands: true,
+          },
+        })
+      })
+    }
+
+    enableSystemCapabilities()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Питание' }))
+
+    const restartKlipperButton = screen.getByRole('button', { name: 'Restart Klipper' })
+
+    expect(restartKlipperButton).not.toBeDisabled()
+    expect(restartKlipperButton).toHaveAttribute('aria-disabled', 'false')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Выключить host' })).toHaveAttribute('aria-disabled', 'false')
+    })
+
+    const shutdownHostButton = screen.getByRole('button', { name: 'Выключить host' })
+    const commandCountBeforeConfirm = getMockCommandOperations().length
+    fireEvent.click(shutdownHostButton)
+    expect(getMockCommandOperations()).toHaveLength(commandCountBeforeConfirm)
+    fireEvent.click(screen.getByRole('button', { name: 'Подтвердить: Выключить host' }))
+
+    await waitFor(() => {
+      expect(getMockCommandOperations()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            command: 'shutdownHost',
+          }),
+        ]),
+      )
+    })
+    expect(screen.getByText('Команда отправлена: Выключить host.')).toBeInTheDocument()
+  })
 })

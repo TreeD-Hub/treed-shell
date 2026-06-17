@@ -88,7 +88,7 @@ function buildMockCommandMessage(args: ExecuteCommandArgs): string {
     case 'restartMoonraker':
       return 'Mock: Moonraker restart requested'
     case 'shutdownHost':
-      return 'Mock: shutdown host is unsupported'
+      return 'Mock: host shutdown requested'
     default:
       return 'Mock: command executed'
   }
@@ -264,16 +264,6 @@ export function createCommandClient(): CommandClient {
           ok: false,
           kind: 'unsupported',
           message: mockCommandFailure.message,
-          at: nowIso(),
-        }
-      }
-
-      if (args.command === 'shutdownHost') {
-        return {
-          command: args.command,
-          ok: false,
-          kind: 'unsupported',
-          message: 'Mock: shutdown host is unsupported',
           at: nowIso(),
         }
       }

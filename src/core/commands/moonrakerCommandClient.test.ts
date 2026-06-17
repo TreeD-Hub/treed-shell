@@ -169,4 +169,50 @@ describe('createMoonrakerCommandClient', () => {
     )
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('routes enabled host power and service commands to Moonraker system endpoints', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ result: 'ok' }),
+    })
+    const client = createMoonrakerCommandClient({
+      moonrakerUrl: 'http://moonraker.local',
+      fetchImpl: fetchMock,
+      capabilities: {
+        power: true,
+      },
+    })
+
+    await client.execute({ command: 'rebootHost' })
+    await client.execute({ command: 'shutdownHost' })
+    await client.execute({ command: 'restartKlipper' })
+    await client.execute({ command: 'firmwareRestart' })
+    await client.execute({ command: 'restartMoonraker' })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://moonraker.local/machine/reboot',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://moonraker.local/machine/shutdown',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'http://moonraker.local/printer/restart',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      'http://moonraker.local/printer/firmware_restart',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      'http://moonraker.local/server/restart',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
 })
