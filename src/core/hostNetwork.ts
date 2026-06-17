@@ -1,69 +1,120 @@
-import type { WifiNetworkItem } from '@treed/printer-logic'
+import {
+  areHostNetworkStatusesEqual,
+  createUnavailableHostNetworkStatus,
+  getHostNetworkErrorMessage,
+  type HostNetworkClient,
+  type HostNetworkConnectArgs,
+  type HostNetworkForgetArgs,
+  type HostNetworkStatus,
+} from '@treed/printer-logic'
+import { moonrakerUrl } from '../config'
 
-export type HostNetworkStatus = {
-  available: boolean
-  ssid: string | null
-  ipAddress: string | null
-  message: string
-  networks: WifiNetworkItem[]
+export {
+  areHostNetworkStatusesEqual,
+  createUnavailableHostNetworkStatus,
+  getHostNetworkErrorMessage,
+  type HostNetworkClient,
+  type HostNetworkConnectArgs,
+  type HostNetworkForgetArgs,
+  type HostNetworkStatus,
 }
 
-export type HostNetworkConnectArgs = {
-  ssid: string
-  password?: string
-}
+export class MoonrakerHostNetworkError extends Error {
+  readonly status: number
 
-export type HostNetworkForgetArgs = {
-  ssid: string
-}
-
-export type HostNetworkClient = {
-  getStatus: () => Promise<HostNetworkStatus>
-  scan: () => Promise<HostNetworkStatus>
-  connect: (args: HostNetworkConnectArgs) => Promise<HostNetworkStatus>
-  forget: (args: HostNetworkForgetArgs) => Promise<HostNetworkStatus>
-}
-
-export function createUnavailableHostNetworkStatus(message: string): HostNetworkStatus {
-  return {
-    available: false,
-    ssid: null,
-    ipAddress: null,
-    message,
-    networks: [],
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'MoonrakerHostNetworkError'
+    this.status = status
   }
 }
 
-export function areHostNetworkStatusesEqual(left: HostNetworkStatus, right: HostNetworkStatus): boolean {
-  return (
-    left.available === right.available &&
-    left.ssid === right.ssid &&
-    left.ipAddress === right.ipAddress &&
-    left.message === right.message &&
-    left.networks.length === right.networks.length &&
-    left.networks.every((leftNetwork, index) => {
-      const rightNetwork = right.networks[index]
-      return (
-        rightNetwork !== undefined &&
-        leftNetwork.id === rightNetwork.id &&
-        leftNetwork.ssid === rightNetwork.ssid &&
-        leftNetwork.signalPercent === rightNetwork.signalPercent &&
-        leftNetwork.security === rightNetwork.security &&
-        leftNetwork.saved === rightNetwork.saved &&
-        leftNetwork.connected === rightNetwork.connected
-      )
-    })
-  )
+type MoonrakerHostNetworkClientOptions = {
+  moonrakerUrl?: string
+  fetchImpl?: typeof fetch
 }
 
-export function getHostNetworkErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message
-  }
+function readMoonrakerErrorMessage(body: unknown, fallback: string): string {
+  if (typeof body === 'object' && body !== null) {
+    const message = 'message' in body ? body.message : undefined
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message
+    }
 
-  if (typeof error === 'string' && error.trim().length > 0) {
-    return error
+    const error = 'error' in body ? body.error : undefined
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+      const errorMessage = error.message
+      if (typeof errorMessage === 'string' && errorMessage.trim().length > 0) {
+        return errorMessage
+      }
+    }
   }
 
   return fallback
+}
+
+async function readJsonResponse(response: Response): Promise<unknown> {
+  const text = await response.text()
+  if (text.trim().length === 0) {
+    return null
+  }
+
+  return JSON.parse(text) as unknown
+}
+
+async function requestHostNetworkStatus(
+  path: string,
+  init: RequestInit,
+  options: Required<MoonrakerHostNetworkClientOptions>,
+): Promise<HostNetworkStatus> {
+  const response = await options.fetchImpl(`${options.moonrakerUrl}${path}`, init)
+  const body = await readJsonResponse(response)
+
+  if (!response.ok) {
+    throw new MoonrakerHostNetworkError(
+      readMoonrakerErrorMessage(body, `Moonraker network endpoint failed with HTTP ${response.status}`),
+      response.status,
+    )
+  }
+
+  return body as HostNetworkStatus
+}
+
+export function isMoonrakerHostNetworkEndpointUnavailable(error: unknown): boolean {
+  return (
+    error instanceof MoonrakerHostNetworkError &&
+    (error.status === 404 || error.status === 501)
+  )
+}
+
+export function createMoonrakerHostNetworkClient(
+  options: MoonrakerHostNetworkClientOptions = {},
+): HostNetworkClient {
+  const clientOptions = {
+    moonrakerUrl: options.moonrakerUrl ?? moonrakerUrl,
+    fetchImpl: options.fetchImpl ?? fetch,
+  }
+
+  return {
+    getStatus() {
+      return requestHostNetworkStatus('/server/treed/network/status', { method: 'GET' }, clientOptions)
+    },
+    scan() {
+      return requestHostNetworkStatus('/server/treed/network/scan', { method: 'POST' }, clientOptions)
+    },
+    connect({ ssid, password }) {
+      return requestHostNetworkStatus('/server/treed/network/connect', {
+        body: JSON.stringify({ ssid, password: password ?? null }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      }, clientOptions)
+    },
+    forget({ ssid }) {
+      return requestHostNetworkStatus('/server/treed/network/forget', {
+        body: JSON.stringify({ ssid }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      }, clientOptions)
+    },
+  }
 }

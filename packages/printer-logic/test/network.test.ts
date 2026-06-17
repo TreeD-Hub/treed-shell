@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  areHostNetworkStatusesEqual,
+  createUnavailableHostNetworkStatus,
   filterWifiNetworks,
+  getHostNetworkErrorMessage,
   getPreferredWifiNetworkId,
+  type HostNetworkStatus,
   type WifiNetworkItem,
 } from '../src'
 
@@ -44,5 +48,29 @@ describe('Wi-Fi network helpers', () => {
     expect(getPreferredWifiNetworkId(networks, 'workshop')).toBe('connected-home')
     expect(getPreferredWifiNetworkId(networks.filter((item) => !item.connected), 'workshop')).toBe('workshop')
     expect(getPreferredWifiNetworkId([], 'workshop')).toBeNull()
+  })
+
+  it('exposes shared host network status helpers without runtime dependencies', () => {
+    const unavailable = createUnavailableHostNetworkStatus('network bridge unavailable')
+    const matching: HostNetworkStatus = {
+      ...unavailable,
+      networks: [],
+    }
+    const changed: HostNetworkStatus = {
+      ...unavailable,
+      message: 'different',
+    }
+
+    expect(unavailable).toEqual({
+      available: false,
+      ssid: null,
+      ipAddress: null,
+      message: 'network bridge unavailable',
+      networks: [],
+    })
+    expect(areHostNetworkStatusesEqual(unavailable, matching)).toBe(true)
+    expect(areHostNetworkStatusesEqual(unavailable, changed)).toBe(false)
+    expect(getHostNetworkErrorMessage(new Error('nmcli failed'), 'fallback')).toBe('nmcli failed')
+    expect(getHostNetworkErrorMessage('', 'fallback')).toBe('fallback')
   })
 })

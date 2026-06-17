@@ -2,7 +2,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { createMoonrakerCommandClient } from '../core/commands/moonrakerCommandClient'
 import type { CommandClient } from '../core/commands/types'
 import {
+  createMoonrakerHostNetworkClient,
   createUnavailableHostNetworkStatus,
+  isMoonrakerHostNetworkEndpointUnavailable,
   type HostNetworkClient,
   type HostNetworkStatus,
 } from '../core/hostNetwork'
@@ -38,18 +40,48 @@ function invokeHostNetwork(command: string, args?: Record<string, unknown>): Pro
 }
 
 export function createHostNetworkClient(): HostNetworkClient {
+  const moonrakerNetworkClient = createMoonrakerHostNetworkClient()
+
+  function withTauriFallback(
+    moonrakerRequest: () => Promise<HostNetworkStatus>,
+    tauriCommand: string,
+    tauriArgs?: Record<string, unknown>,
+  ): Promise<HostNetworkStatus> {
+    return moonrakerRequest().catch((error: unknown) => {
+      if (isTauriRuntimeAvailable() && isMoonrakerHostNetworkEndpointUnavailable(error)) {
+        return invokeHostNetwork(tauriCommand, tauriArgs)
+      }
+
+      throw error
+    })
+  }
+
   return {
     getStatus() {
-      return invokeHostNetwork('network_status')
+      return withTauriFallback(
+        () => moonrakerNetworkClient.getStatus(),
+        'network_status',
+      )
     },
     scan() {
-      return invokeHostNetwork('network_scan')
+      return withTauriFallback(
+        () => moonrakerNetworkClient.scan(),
+        'network_scan',
+      )
     },
     connect({ ssid, password }) {
-      return invokeHostNetwork('network_connect', { ssid, password: password ?? null })
+      return withTauriFallback(
+        () => moonrakerNetworkClient.connect({ ssid, password }),
+        'network_connect',
+        { ssid, password: password ?? null },
+      )
     },
     forget({ ssid }) {
-      return invokeHostNetwork('network_forget', { ssid })
+      return withTauriFallback(
+        () => moonrakerNetworkClient.forget({ ssid }),
+        'network_forget',
+        { ssid },
+      )
     },
   }
 }
