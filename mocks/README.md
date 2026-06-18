@@ -1,4 +1,4 @@
-﻿# `mocks`
+# `mocks`
 
 Локальные mock-сценарии данных для режима `vite --mode mock`.
 
