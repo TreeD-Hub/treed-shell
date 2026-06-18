@@ -1,11 +1,11 @@
 import { useMemo, useSyncExternalStore } from 'react'
-import { dataMode } from '../../config'
+import { runtimeMode } from '#runtime'
 import type { PrinterSnapshot } from '../transport/types'
 
 type PrinterStoreListener = () => void
 
 export const FALLBACK_PRINTER_SNAPSHOT: PrinterSnapshot = {
-  source: dataMode,
+  source: runtimeMode,
   connection: 'connecting',
   wifiSsid: 'Не подключено',
   ipAddress: '—',
@@ -89,6 +89,19 @@ export const FALLBACK_PRINTER_SNAPSHOT: PrinterSnapshot = {
     speedFactor: 1,
     speed: 0,
     extrudeFactor: 1,
+  },
+  thermalTargets: {
+    nozzle: 0,
+    bed: 0,
+  },
+  runtimeTune: {
+    contractVersion: null,
+    speedFactorPercent: 100,
+    flowFactorPercent: 100,
+    accelMmS2: 0,
+    pressureAdvance: 0,
+    retractLengthMm: 0,
+    appliedBabystepMm: 0,
   },
   macros: {
     available: [],

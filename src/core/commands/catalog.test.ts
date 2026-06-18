@@ -24,6 +24,12 @@ const ALL_COMMAND_IDS: PrinterCommandId[] = [
   'setBedTarget',
   'turnOffHeaters',
   'setFanPercent',
+  'setPrintSpeedFactorPercent',
+  'setPrintFlowFactorPercent',
+  'setPrintAccel',
+  'setPressureAdvance',
+  'setRetractionLength',
+  'adjustZOffset',
   'loadFilament',
   'unloadFilament',
   'zParkZeroEddy',
@@ -66,7 +72,13 @@ const IDLE_CONTEXT: TreeDCommandRuntimeContext = {
     isPaused: false,
   },
   homedAxes: 'xyz',
+  toolhead: {
+    rawX: 10,
+    rawY: 20,
+    rawZ: 5,
+  },
   eddyStatus: 'ready',
+  extruderTemp: 210,
 }
 
 const PRINTING_CONTEXT: TreeDCommandRuntimeContext = {
@@ -147,6 +159,18 @@ describe('TREE_D_COMMAND_CATALOG', () => {
       ...PRINTING_CONTEXT,
       connection: 'reconnecting',
     })).toContain('восстановление связи')
+    expect(getTreeDCommandBlockReason('pause', {
+      ...PRINTING_CONTEXT,
+      connection: 'connecting',
+    })).toContain('подключение')
+    expect(getTreeDCommandBlockReason('pause', {
+      ...PRINTING_CONTEXT,
+      connection: 'offline',
+    })).toContain('нет связи')
+    expect(getTreeDCommandBlockReason('pause', {
+      ...PRINTING_CONTEXT,
+      connection: 'shutdown',
+    })).toContain('Klipper остановлен')
   })
 
   it('blocks print and motion commands that do not match runtime state', () => {
@@ -166,11 +190,50 @@ describe('TREE_D_COMMAND_CATALOG', () => {
       command: 'moveAxis',
       axis: 'Z',
       distanceMm: 1,
-    })).toContain('ось Z')
+    })).toContain('Home XYZ')
+    expect(getTreeDCommandBlockReason('moveAxis', {
+      ...IDLE_CONTEXT,
+      toolhead: {
+        rawX: 10,
+        rawY: Number.NaN,
+        rawZ: 5,
+      },
+    }, {
+      command: 'moveAxis',
+      axis: 'Y',
+      distanceMm: 1,
+    })).toContain('координаты XYZ')
+    expect(getTreeDCommandBlockReason('loadFilament', {
+      ...IDLE_CONTEXT,
+      extruderTemp: 169,
+    })).toContain('170')
     expect(getTreeDCommandBlockReason('moveAxis', PRINTING_CONTEXT, {
       command: 'moveAxis',
       axis: 'X',
       distanceMm: 1,
     })).toContain('во время печати')
+  })
+
+  it('allows confirmed host power and service commands during active print', () => {
+    expect(getTreeDCommandBlockReason('rebootHost', PRINTING_CONTEXT)).toBeNull()
+    expect(getTreeDCommandBlockReason('shutdownHost', PRINTING_CONTEXT)).toBeNull()
+    expect(getTreeDCommandBlockReason('restartKlipper', PRINTING_CONTEXT)).toBeNull()
+    expect(getTreeDCommandBlockReason('firmwareRestart', PRINTING_CONTEXT)).toBeNull()
+    expect(getTreeDCommandBlockReason('restartMoonraker', PRINTING_CONTEXT)).toBeNull()
+
+    expect(getTreeDCommandBlockReason('rebootHost', {
+      ...PRINTING_CONTEXT,
+      capabilities: {
+        ...ALL_CAPABILITIES,
+        power: false,
+      },
+    })).toContain('capability')
+    expect(getTreeDCommandBlockReason('restartKlipper', {
+      ...PRINTING_CONTEXT,
+      capabilities: {
+        ...ALL_CAPABILITIES,
+        serviceCommands: false,
+      },
+    })).toContain('capability')
   })
 })

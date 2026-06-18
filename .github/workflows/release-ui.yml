@@ -39,7 +39,7 @@ jobs:
 
       - name: Add UI build manifest
         run: |
-          node -e "const fs = require('fs'); fs.writeFileSync('dist/treed-shell-ui-manifest.json', JSON.stringify({ name: 'treed-shell-ui', mode: 'live', ref: process.env.GITHUB_REF_NAME, sha: process.env.GITHUB_SHA, runNumber: process.env.GITHUB_RUN_NUMBER, runAttempt: process.env.GITHUB_RUN_ATTEMPT, builtAt: new Date().toISOString() }, null, 2) + '\n')"
+          node -e "const fs = require('fs'); const logic = require('./packages/printer-logic/package.json'); fs.writeFileSync('dist/treed-shell-ui-manifest.json', JSON.stringify({ name: 'treed-shell-ui', mode: 'live', ref: process.env.GITHUB_REF_NAME, sha: process.env.GITHUB_SHA, runNumber: process.env.GITHUB_RUN_NUMBER, runAttempt: process.env.GITHUB_RUN_ATTEMPT, logicPackage: '@treed/printer-logic', logicVersion: logic.version, logicWorkspace: 'packages/printer-logic', builtAt: new Date().toISOString() }, null, 2) + '\n')"
 
       - name: Pack UI bundle
         run: |

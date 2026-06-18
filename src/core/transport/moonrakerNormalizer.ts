@@ -9,10 +9,18 @@ import type {
   PrinterPositionSnapshot,
   PrinterPrintJobSnapshot,
   PrinterRuntimeSnapshot,
+  PrinterRuntimeTuneSnapshot,
   PrinterSource,
+  PrinterThermalTargetsSnapshot,
   PrinterToolheadRuntimeSnapshot,
   PrinterV2Snapshot,
 } from './types'
+import {
+  getPrinterFileDirectoryFromPath,
+  getPrinterFileNameFromPath,
+  normalizePrinterFileId,
+  normalizePrinterFilePath,
+} from '@treed/printer-logic'
 
 export interface MoonrakerObjectsQueryPayload {
   eventtime?: number
@@ -27,6 +35,7 @@ export interface MoonrakerPrinterObjectsStatus {
   extruder?: MoonrakerHeaterStatus
   heater_bed?: MoonrakerHeaterStatus
   fan?: MoonrakerFanStatus
+  firmware_retraction?: MoonrakerFirmwareRetractionStatus
   display_status?: MoonrakerDisplayStatus
   pause_resume?: MoonrakerPauseResumeStatus
   webhooks?: MoonrakerWebhooksStatus
@@ -36,6 +45,7 @@ export interface MoonrakerPrinterObjectsStatus {
 export interface MoonrakerToolheadStatus {
   position?: Array<number | null | undefined>
   homed_axes?: string
+  max_accel?: number
 }
 
 export interface MoonrakerGcodeMoveStatus {
@@ -73,10 +83,15 @@ export interface MoonrakerVirtualSdCardStatus {
 export interface MoonrakerHeaterStatus {
   temperature?: number
   target?: number
+  pressure_advance?: number
 }
 
 export interface MoonrakerFanStatus {
   speed?: number
+}
+
+export interface MoonrakerFirmwareRetractionStatus {
+  retract_length?: number
 }
 
 export interface MoonrakerDisplayStatus {
@@ -262,6 +277,39 @@ function normalizeFan(value: MoonrakerFanStatus | undefined): number {
   return clamp(toFiniteNumber(value?.speed, 0) * 100, 0, 100)
 }
 
+function normalizeThermalTargets(
+  extruder: MoonrakerHeaterStatus | undefined,
+  heaterBed: MoonrakerHeaterStatus | undefined,
+): PrinterThermalTargetsSnapshot {
+  return {
+    nozzle: toFiniteNumber(extruder?.target, 0),
+    bed: toFiniteNumber(heaterBed?.target, 0),
+  }
+}
+
+function normalizeRuntimeTune(
+  toolhead: MoonrakerToolheadStatus | undefined,
+  gcodeMove: PrinterGeometrySnapshot,
+  extruder: MoonrakerHeaterStatus | undefined,
+  firmwareRetraction: MoonrakerFirmwareRetractionStatus | undefined,
+  macros: PrinterMacroStateSnapshot,
+): PrinterRuntimeTuneSnapshot {
+  const uiTuneState = readMacro(macros.values, '_TREED_UI_TUNE_STATE')
+  const contractVersion = typeof uiTuneState?.contract_version === 'string'
+    ? uiTuneState.contract_version
+    : null
+
+  return {
+    contractVersion,
+    speedFactorPercent: Math.round(gcodeMove.speedFactor * 100),
+    flowFactorPercent: Math.round(gcodeMove.extrudeFactor * 100),
+    accelMmS2: toFiniteNumber(toolhead?.max_accel, 0),
+    pressureAdvance: toFiniteNumber(extruder?.pressure_advance, 0),
+    retractLengthMm: toFiniteNumber(firmwareRetraction?.retract_length, 0),
+    appliedBabystepMm: toFiniteNumber(uiTuneState?.applied_babystep, 0),
+  }
+}
+
 function normalizeDisplayStatus(displayStatus: MoonrakerDisplayStatus | undefined): MoonrakerDisplayStatus {
   return {
     message: displayStatus?.message ?? '',
@@ -280,16 +328,6 @@ function normalizeWebhooks(webhooks: MoonrakerWebhooksStatus | undefined): Moonr
     state: webhooks?.state ?? '',
     state_message: webhooks?.state_message ?? '',
   }
-}
-
-function normalizeFileId(path: string): string {
-  const slug = path
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-
-  return `file-${slug || 'gcode'}`
 }
 
 function formatDuration(seconds: number): string {
@@ -331,15 +369,17 @@ function normalizeMaterial(metadata: MoonrakerPrintFileMetadata | undefined): st
 export function normalizeMoonrakerPrintFiles(items: MoonrakerPrintFileInput[]): PrinterFileItemSnapshot[] {
   return items
     .map((item): PrinterFileItemSnapshot | null => {
-      const path = firstNonEmpty(item.path, item.filename)
+      const path = normalizePrinterFilePath(firstNonEmpty(item.path, item.filename))
 
       if (!path.toLowerCase().endsWith('.gcode')) {
         return null
       }
 
       return {
-        id: normalizeFileId(path),
-        name: path,
+        id: normalizePrinterFileId(path),
+        path,
+        name: getPrinterFileNameFromPath(path),
+        directory: getPrinterFileDirectoryFromPath(path),
         printTime: formatDuration(toFiniteNumber(item.metadata?.estimated_time, 0)),
         weight: formatFilamentWeight(item.metadata?.filament_total, item.size),
         material: normalizeMaterial(item.metadata),
@@ -613,6 +653,8 @@ export function normalizeMoonrakerRuntimeSnapshot(
       speed: gcodeMove.speed,
       extrudeFactor: gcodeMove.extrudeFactor,
     },
+    thermalTargets: normalizeThermalTargets(status.extruder, status.heater_bed),
+    runtimeTune: normalizeRuntimeTune(status.toolhead, gcodeMove, status.extruder, status.firmware_retraction, macros),
     macros,
     printFiles: normalizeMoonrakerPrintFiles(options.printFiles ?? []),
     v2: normalizeV2Snapshot(macros, webhooks, homedAxes),

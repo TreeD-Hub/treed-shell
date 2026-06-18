@@ -1,8 +1,6 @@
-import { useCallback, useMemo, useState } from 'react'
-import { dataMode } from '../../config'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { createCommandClient } from '#runtime'
 import { getTreeDCommandBlockReason, type TreeDCommandRuntimeContext } from './catalog'
-import { createMockCommandClient } from './mockCommandClient'
-import { createMoonrakerCommandClient } from './moonrakerCommandClient'
 import type { CommandResult, ExecuteCommandArgs, PrinterCommandId } from './types'
 
 export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
@@ -11,12 +9,11 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
     null,
   )
   const [error, setError] = useState('')
+  const lastErrorRef = useRef('')
   const [lastResult, setLastResult] = useState<CommandResult | null>(null)
 
   const client = useMemo(() => {
-    return dataMode === 'live'
-      ? createMoonrakerCommandClient({ capabilities: { power: powerCapability } })
-      : createMockCommandClient()
+    return createCommandClient({ capabilities: { power: powerCapability } })
   }, [powerCapability])
 
   const executeCommand = useCallback(
@@ -36,18 +33,21 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
           message: blockReason,
           at: new Date().toISOString(),
         }
+        lastErrorRef.current = blockReason
         setError(blockReason)
         setLastResult(result)
         return false
       }
 
       setPendingCommand(command)
+      lastErrorRef.current = ''
       setError('')
 
       try {
         const result = await client.execute(args)
         setLastResult(result)
         if (!result.ok) {
+          lastErrorRef.current = result.message
           setError(result.message)
           return false
         }
@@ -55,6 +55,7 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
         return true
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown command error'
+        lastErrorRef.current = message
         setError(message)
         return false
       } finally {
@@ -65,8 +66,11 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
   )
 
   const clearCommandError = useCallback(() => {
+    lastErrorRef.current = ''
     setError('')
   }, [])
+
+  const getLastCommandError = useCallback(() => lastErrorRef.current, [])
 
   return {
     pendingCommand,
@@ -74,5 +78,6 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
     lastResult,
     executeCommand,
     clearCommandError,
+    getLastCommandError,
   }
 }

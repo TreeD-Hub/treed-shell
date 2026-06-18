@@ -1,12 +1,18 @@
-export type PrinterSource = 'mock' | 'live'
+import type {
+  PrinterCapabilitiesSnapshot,
+  PrinterConnectionState,
+  PrinterEddyStatus,
+  PrinterFileItem,
+} from '@treed/printer-logic'
 
-export type PrinterConnectionState =
-  | 'connecting'
-  | 'online'
-  | 'degraded'
-  | 'reconnecting'
-  | 'offline'
-  | 'shutdown'
+export type {
+  PrinterCapabilitiesSnapshot,
+  PrinterConnectionState,
+  PrinterEddyStatus,
+  PrinterFileItem,
+} from '@treed/printer-logic'
+
+export type PrinterSource = 'mock' | 'live'
 
 export interface PrinterHardwareSnapshot {
   marker: 'treed-v2'
@@ -17,25 +23,6 @@ export interface PrinterHardwareSnapshot {
   probe: string
   model: string
   revision: string | null
-}
-
-export interface PrinterCapabilitiesSnapshot {
-  print: boolean
-  motion: boolean
-  thermal: boolean
-  fan: boolean
-  filament: boolean
-  console: boolean
-  eddy: boolean
-  shaper: boolean
-  motionTest: boolean
-  power: boolean
-  network: boolean
-  cloud: boolean
-  updates: boolean
-  systemPower: boolean
-  camera: boolean
-  serviceCommands: boolean
 }
 
 export interface PrinterPositionSnapshot {
@@ -54,6 +41,21 @@ export interface PrinterGeometrySnapshot {
   speedFactor: number
   speed: number
   extrudeFactor: number
+}
+
+export interface PrinterThermalTargetsSnapshot {
+  nozzle: number
+  bed: number
+}
+
+export interface PrinterRuntimeTuneSnapshot {
+  contractVersion: string | null
+  speedFactorPercent: number
+  flowFactorPercent: number
+  accelMmS2: number
+  pressureAdvance: number
+  retractLengthMm: number
+  appliedBabystepMm: number
 }
 
 export interface PrinterFilesSnapshot {
@@ -86,14 +88,7 @@ export interface PrinterMacroStateSnapshot {
   values: Record<string, Record<string, unknown>>
 }
 
-export interface PrinterFileItemSnapshot {
-  id: string
-  name: string
-  printTime: string
-  weight: string
-  material: string
-  addedAt: string
-}
+export type PrinterFileItemSnapshot = PrinterFileItem
 
 export interface PrinterToolheadRuntimeSnapshot {
   rawX: number
@@ -105,8 +100,6 @@ export interface PrinterToolheadRuntimeSnapshot {
   homedAxes: string
   coordinateMode: 'raw'
 }
-
-export type PrinterEddyStatus = 'unknown' | 'ready' | 'uncalibrated' | 'requires_xy_home'
 
 export interface PrinterV2Snapshot {
   branch: 'treed-v2'
@@ -139,6 +132,8 @@ export interface PrinterRuntimeSnapshot {
   files: PrinterFilesSnapshot
   toolhead: PrinterToolheadRuntimeSnapshot
   geometry: PrinterGeometrySnapshot
+  thermalTargets: PrinterThermalTargetsSnapshot
+  runtimeTune: PrinterRuntimeTuneSnapshot
   macros: PrinterMacroStateSnapshot
   printFiles: PrinterFileItemSnapshot[]
   v2: PrinterV2Snapshot

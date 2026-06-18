@@ -1,13 +1,10 @@
-export type PrintFileItem = {
-  id: string
-  name: string
-  printTime: string
-  weight: string
-  material: string
-  addedAt: string
-}
+import type { PrinterFileItem } from '@treed/printer-logic'
 
-export const PRINT_FILE_LIBRARY: PrintFileItem[] = [
+export type PrintFileItem = PrinterFileItem
+
+type PrintFileSeed = Omit<PrintFileItem, 'path' | 'directory'>
+
+const PRINT_FILE_SEEDS: PrintFileSeed[] = [
   {
     id: 'file-bearing-bracket-mk2',
     name: 'bearing_bracket_mk2.gcode',
@@ -105,3 +102,9 @@ export const PRINT_FILE_LIBRARY: PrintFileItem[] = [
     addedAt: '2026-03-10T09:02:00+03:00',
   },
 ]
+
+export const PRINT_FILE_LIBRARY: PrintFileItem[] = PRINT_FILE_SEEDS.map((item) => ({
+  ...item,
+  path: item.name,
+  directory: null,
+}))
