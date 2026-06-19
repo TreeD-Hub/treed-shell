@@ -7,6 +7,8 @@ export type {
   WifiNetworkSecurity,
 } from '@treed/printer-logic'
 export { SettingsPage } from './SettingsPage'
+export { SettingsContainer } from './SettingsContainer'
+export type { SettingsContainerProps } from './SettingsContainer'
 export type { ConsoleHistoryItem, SettingsPageProps } from './SettingsPage'
 export {
   getSettingsKeyboardMeta,

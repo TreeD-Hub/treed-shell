@@ -1,5 +1,6 @@
-import { type ChangeEvent, type CSSProperties, type MouseEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createHostNetworkClient } from '#runtime'
+import { AppScreenContent } from './app/AppScreenContent'
 import {
   getTreeDCommandBlockReason,
   getTreeDCommandCatalogItem,
@@ -8,33 +9,28 @@ import {
   type PrinterCommandId,
 } from './core/commands'
 import { usePrinterSnapshot } from './core/store/usePrinterSnapshot'
-import { DashboardPage, type DashboardIdleWidgetId } from './dashboard/DashboardPage'
+import type { DashboardContainerProps } from './dashboard/DashboardContainer'
 import { DashboardStatusDock } from './dashboard/DashboardStatusDock'
 import {
   BABYSTEP_STEP_OPTIONS,
-  BOTTOM_NAV_ITEMS,
   type ScreenId,
 } from './dashboard/config'
+import { useDashboardIdleController, type DashboardIdleControlGroupId } from './dashboard/useDashboardIdleController'
 import { usePrinterDisplayStatus } from './dashboard/usePrinterDisplayStatus'
-import { clampPercent } from './dashboard/helpers'
 import {
-  ControlPage,
   type ControlGroupId,
-  type MovementCommandBlockReasons,
   type MoveStepKey,
   type MovementMode,
   type ParkingMode,
 } from './control'
 import {
-  NavItemButton,
   SettingsVirtualKeyboard,
   type VirtualKeyboardLanguage,
   type AxisId,
 } from './ui'
-import { FilesPage, PrintFileModal } from './files'
+import { PrintFileModal } from './files'
 import {
   isSettingsKeyboardTarget,
-  SettingsPage,
   useSettingsController,
   type SettingsKeyboardTarget,
 } from './settings'
@@ -46,14 +42,13 @@ import {
 } from './printTune'
 import { usePrintSessionController } from './printSession'
 import { useHeatingFanController } from './heating'
+import { useMaintenanceController } from './maintenance'
 import type { PrinterConnectionState } from './core/transport/types'
 import treeDLogoAsset from './assets/logo_treeD-28.svg'
 import './App.css'
 
 const DEFAULT_SCREEN: ScreenId = 'dashboard'
-const IDLE_WIDGET_DRAG_HOLD_MS = 3000
 const PRINT_CANCEL_MODAL_TITLE_ID = 'print-cancel-modal-title'
-type IdleWidgetId = DashboardIdleWidgetId
 type KeyboardTarget = 'idleNotes' | SettingsKeyboardTarget
 const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
   connecting: 'Подключение',
@@ -62,48 +57,6 @@ const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
   reconnecting: 'Переподключение',
   offline: 'Офлайн',
   shutdown: 'Klipper остановлен',
-}
-const HEAD_Z_BOUNDS_MM = { min: 0, max: 200 } as const
-const MAINTENANCE_STATUS = {
-  runtimeHours: 874,
-  hoursLeft: 126,
-  intervalHours: 1000,
-} as const
-const MAINTENANCE_HISTORY_ITEMS = [
-  { id: '3', date: '03.05.2024', runtimeHours: 748, label: 'Плановое ТО' },
-] as const
-const MAINTENANCE_CHECKLIST_ITEMS = [
-  { id: 'belts', label: 'Проверка натяжения ремней' },
-  { id: 'guides', label: 'Очистка направляющих и винтов' },
-  { id: 'axes', label: 'Смазка осей и подшипников' },
-  { id: 'fans', label: 'Проверка вентиляторов и обдува' },
-  { id: 'hotend', label: 'Осмотр сопла и хотэнда' },
-  { id: 'calibration', label: 'Калибровка стола (при необходимости)' },
-] as const
-const MAINTENANCE_PROGRESS_TICKS = Array.from({ length: 31 }, (_, index) => index)
-type MaintenanceChecklistItemId = (typeof MAINTENANCE_CHECKLIST_ITEMS)[number]['id']
-const IDLE_NOTES_DEFAULT_TEXT = [
-  'Экосистема TreeD V2.',
-  'Перед запуском проверьте очистку стола и состояние поверхности.',
-  'Если модель новая, сделайте короткий тест первого слоя.',
-].join('\n')
-const IDLE_NOTES_KEYBOARD_ROWS: string[][] = [
-  ['Й', 'Ц', 'У', 'К', 'Е', 'Н', 'Г', 'Ш', 'Щ', 'З', 'Х'],
-  ['Ф', 'Ы', 'В', 'А', 'П', 'Р', 'О', 'Л', 'Д', 'Ж', 'Э'],
-  ['Я', 'Ч', 'С', 'М', 'И', 'Т', 'Ь', 'Б', 'Ю'],
-]
-
-function createMaintenanceChecklistState(checked: boolean): Record<MaintenanceChecklistItemId, boolean> {
-  return MAINTENANCE_CHECKLIST_ITEMS.reduce<Record<MaintenanceChecklistItemId, boolean>>((state, item) => {
-    state[item.id] = checked
-    return state
-  }, {} as Record<MaintenanceChecklistItemId, boolean>)
-}
-
-const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard' | 'control' | 'files' | 'settings'>, { description: string }> = {
-  macros: {
-    description: '',
-  },
 }
 
 function App() {
@@ -171,7 +124,6 @@ function App() {
   const handleRetractionLengthChange = useCallback((retractLengthMm: number): void => {
     void executeCommand({ command: 'setRetractionLength', retractLengthMm })
   }, [executeCommand])
-  const [idleNotesText, setIdleNotesText] = useState<string>(IDLE_NOTES_DEFAULT_TEXT)
   const [activeKeyboardTarget, setActiveKeyboardTarget] = useState<KeyboardTarget | null>(null)
   const [keyboardLanguage, setKeyboardLanguage] = useState<VirtualKeyboardLanguage>('ru')
   const [isKeyboardCapsEnabled, setIsKeyboardCapsEnabled] = useState<boolean>(false)
@@ -182,22 +134,10 @@ function App() {
   const [activeControlGroup, setActiveControlGroup] = useState<ControlGroupId>('movement')
   const [isControlMenuCompact, setIsControlMenuCompact] = useState<boolean>(false)
   const [activeControlFlashKey, setActiveControlFlashKey] = useState<string | null>(null)
-  const [idleWidgetOrder, setIdleWidgetOrder] = useState<IdleWidgetId[]>(['temperature', 'maintenance'])
-  const [armedIdleWidgetId, setArmedIdleWidgetId] = useState<IdleWidgetId | null>(null)
-  const [draggingIdleWidgetId, setDraggingIdleWidgetId] = useState<IdleWidgetId | null>(null)
   const [isMainLightEnabled, setIsMainLightEnabled] = useState<boolean>(false)
   const [isToolheadLightEnabled, setIsToolheadLightEnabled] = useState<boolean>(false)
-  const [maintenanceChecklistState, setMaintenanceChecklistState] = useState<Record<MaintenanceChecklistItemId, boolean>>(() =>
-    createMaintenanceChecklistState(false),
-  )
-  const idleNotesInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const maintenanceController = useMaintenanceController()
   const controlFlashTimeoutRef = useRef<number | null>(null)
-  const idleWidgetHoldTimeoutRef = useRef<number | null>(null)
-  const idleWidgetRefs = useRef<Record<IdleWidgetId, HTMLElement | null>>({
-    temperature: null,
-    maintenance: null,
-  })
-  const draggingIdleWidgetIdRef = useRef<IdleWidgetId | null>(null)
 
   const {
     files: effectiveFilesLibrary,
@@ -256,16 +196,6 @@ function App() {
     handleFanPercentChange,
   } = heatingController
   const isFilesScreenActive = activeScreen === 'files'
-  const activeNavIndex = Math.max(
-    0,
-    BOTTOM_NAV_ITEMS.findIndex((item) => item.id === activeScreen),
-  )
-  const babystepActiveIndex = Math.max(
-    0,
-    BABYSTEP_STEP_OPTIONS.findIndex((step) => step === babystepStep),
-  )
-  const maintenanceProgressPercent = clampPercent(MAINTENANCE_STATUS.runtimeHours, MAINTENANCE_STATUS.intervalHours)
-  const isMaintenanceChecklistComplete = MAINTENANCE_CHECKLIST_ITEMS.every((item) => maintenanceChecklistState[item.id])
   const formattedSnapshotTime = useMemo(() => {
     const parsed = new Date(snapshot.updatedAt)
     if (Number.isNaN(parsed.getTime())) {
@@ -297,6 +227,9 @@ function App() {
   const settingsKeyboard = settingsController.keyboard
   const isSettingsKeyboardTargetAllowed = settingsController.isKeyboardTargetAllowed
   const setActiveSettingsGroup = settingsPageProps.onSettingsGroupChange
+  const handleKeyboardClose = useCallback(() => {
+    setActiveKeyboardTarget(null)
+  }, [])
   const cloudStatusLabel = isCloudCapabilityAvailable && snapshot.connection === 'online' ? 'В сети' : 'Недоступно'
   const cloudCapabilityNotice = settingsPageProps.cloud.notice
   const isMaxPerformanceModeEnabled = settingsPageProps.interfaceSettings.isMaxPerformanceModeEnabled
@@ -317,13 +250,19 @@ function App() {
   const closeTopPopup = topStatusController.closeTopPopup
   const openTopPopup = topStatusController.openTopPopup
   const setTopButtonRef = topStatusController.setTopButtonRef
-  const printPauseBlockReason = getCommandBlockReason(printPauseCommand)
+  const handleDashboardIdleControlGroupOpen = useCallback((groupId: DashboardIdleControlGroupId): void => {
+    setActiveControlGroup(groupId)
+    setActiveScreen('control')
+    closeTopPopup()
+  }, [closeTopPopup])
+  const dashboardIdleController = useDashboardIdleController({
+    isKeyboardOpen: activeKeyboardTarget === 'idleNotes',
+    onKeyboardOpen: () => setActiveKeyboardTarget('idleNotes'),
+    onKeyboardClose: handleKeyboardClose,
+    onControlGroupOpen: handleDashboardIdleControlGroupOpen,
+  })
   const printCancelBlockReason = getCommandBlockReason('cancel')
   const printStartBlockReason = getCommandBlockReason('start')
-  const babystepBlockReason = getCommandBlockReason('adjustZOffset', {
-    command: 'adjustZOffset',
-    deltaMm: babystepStep,
-  })
   const fileStartNotice = getFileStartNotice(printStartBlockReason)
   const printSessionCommandHandlers = createPrintSessionCommandHandlers({
     executeCommand,
@@ -335,32 +274,13 @@ function App() {
     refresh,
     onOpenDashboard: () => setActiveScreen('dashboard'),
   })
-  const movementCommandBlockReasons = useMemo<MovementCommandBlockReasons>(() => ({
-    parking: {
-      all: getCommandBlockReason('homeAll'),
-      axis: {
-        X: getCommandBlockReason('homeXY'),
-        Y: getCommandBlockReason('homeXY'),
-        Z: getCommandBlockReason('homeZ'),
-      },
-    },
-    moveAxis: {
-      X: getCommandBlockReason('moveAxis', { command: 'moveAxis', axis: 'X', distanceMm: 1 }),
-      Y: getCommandBlockReason('moveAxis', { command: 'moveAxis', axis: 'Y', distanceMm: 1 }),
-      Z: getCommandBlockReason('moveAxis', { command: 'moveAxis', axis: 'Z', distanceMm: 1 }),
-    },
-    loadFilament: getCommandBlockReason('loadFilament'),
-    unloadFilament: getCommandBlockReason('unloadFilament'),
-  }), [getCommandBlockReason])
   const idleHeroStatusLabel = printerDisplayStatus.label
   const settingsKeyboardMeta = settingsKeyboard.meta
-  const keyboardLabel = activeKeyboardTarget === 'idleNotes' ? 'Ввод заметок' : (settingsKeyboardMeta?.valueLabel ?? '')
-  const keyboardPlaceholder = activeKeyboardTarget === 'idleNotes' ? 'Введите заметку...' : (settingsKeyboardMeta?.placeholder ?? '')
-  const keyboardTestId = activeKeyboardTarget === 'idleNotes' ? 'idle-notes-keyboard' : (settingsKeyboardMeta?.testId ?? '')
-  const keyboardPreviewTestId = activeKeyboardTarget === 'idleNotes'
-    ? 'idle-notes-keyboard-preview'
-    : (settingsKeyboardMeta?.previewTestId ?? '')
-  const keyboardDialogValue = activeKeyboardTarget === 'idleNotes' ? idleNotesText : settingsKeyboard.value
+  const keyboardLabel = settingsKeyboardMeta?.valueLabel ?? ''
+  const keyboardPlaceholder = settingsKeyboardMeta?.placeholder ?? ''
+  const keyboardTestId = settingsKeyboardMeta?.testId ?? ''
+  const keyboardPreviewTestId = settingsKeyboardMeta?.previewTestId ?? ''
+  const keyboardDialogValue = settingsKeyboard.value
   const keyboardDialogLabel = keyboardLabel
   const keyboardDialogPlaceholder = keyboardPlaceholder
   const keyboardDialogTestId = keyboardTestId
@@ -371,14 +291,9 @@ function App() {
       if (controlFlashTimeoutRef.current !== null) {
         window.clearTimeout(controlFlashTimeoutRef.current)
       }
-
-      if (idleWidgetHoldTimeoutRef.current !== null) {
-        window.clearTimeout(idleWidgetHoldTimeoutRef.current)
-      }
     }
   }, [])
 
-  const quickMetrics = createQuickMetrics(printFanPercent)
   const printTuneModalValues = createModalValues({
     fanPercent: printFanPercent,
   })
@@ -394,95 +309,6 @@ function App() {
     void executeCommand({ command: 'adjustZOffset', deltaMm })
   }, [executeCommand])
 
-  function clearIdleWidgetHoldTimeout(): void {
-    if (idleWidgetHoldTimeoutRef.current === null) {
-      return
-    }
-
-    window.clearTimeout(idleWidgetHoldTimeoutRef.current)
-    idleWidgetHoldTimeoutRef.current = null
-  }
-
-  function openIdleWidgetTarget(widgetId: IdleWidgetId): void {
-    setActiveControlGroup(widgetId === 'temperature' ? 'heating' : 'maintenance')
-    setActiveScreen('control')
-    closeTopPopup()
-  }
-
-  function moveIdleWidgetByPointer(widgetId: IdleWidgetId, pointerX: number): void {
-    const temperatureRect = idleWidgetRefs.current.temperature?.getBoundingClientRect()
-    const maintenanceRect = idleWidgetRefs.current.maintenance?.getBoundingClientRect()
-
-    if (temperatureRect === undefined || maintenanceRect === undefined) {
-      return
-    }
-
-    const leftEdge = Math.min(temperatureRect.left, maintenanceRect.left)
-    const rightEdge = Math.max(temperatureRect.right, maintenanceRect.right)
-    const targetIndex = pointerX < leftEdge + ((rightEdge - leftEdge) / 2) ? 0 : 1
-
-    setIdleWidgetOrder((currentOrder) => {
-      const currentIndex = currentOrder.indexOf(widgetId)
-
-      if (currentIndex === targetIndex) {
-        return currentOrder
-      }
-
-      const otherWidgetId = currentOrder.find((currentWidgetId) => currentWidgetId !== widgetId)
-      if (otherWidgetId === undefined) {
-        return currentOrder
-      }
-
-      return targetIndex === 0 ? [widgetId, otherWidgetId] : [otherWidgetId, widgetId]
-    })
-  }
-
-  function handleIdleWidgetDragPointerDown(event: PointerEvent<HTMLButtonElement>, widgetId: IdleWidgetId): void {
-    event.preventDefault()
-    event.stopPropagation()
-
-    clearIdleWidgetHoldTimeout()
-    setArmedIdleWidgetId(widgetId)
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    idleWidgetHoldTimeoutRef.current = window.setTimeout(() => {
-      draggingIdleWidgetIdRef.current = widgetId
-      setArmedIdleWidgetId(null)
-      setDraggingIdleWidgetId(widgetId)
-      idleWidgetHoldTimeoutRef.current = null
-    }, IDLE_WIDGET_DRAG_HOLD_MS)
-  }
-
-  function handleIdleWidgetDragPointerMove(event: PointerEvent<HTMLButtonElement>, widgetId: IdleWidgetId): void {
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (draggingIdleWidgetIdRef.current !== widgetId) {
-      return
-    }
-
-    moveIdleWidgetByPointer(widgetId, event.clientX)
-  }
-
-  function handleIdleWidgetDragPointerEnd(event: PointerEvent<HTMLButtonElement>): void {
-    event.preventDefault()
-    event.stopPropagation()
-
-    clearIdleWidgetHoldTimeout()
-    setArmedIdleWidgetId(null)
-    setDraggingIdleWidgetId(null)
-    draggingIdleWidgetIdRef.current = null
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }
-
-  function handleIdleWidgetDragHandleClick(event: MouseEvent<HTMLButtonElement>): void {
-    event.preventDefault()
-    event.stopPropagation()
-  }
-
   function handleScreenSelect(nextScreen: ScreenId): void {
     if (nextScreen !== 'dashboard') {
       closeTopPopup()
@@ -491,44 +317,9 @@ function App() {
     setActiveScreen(nextScreen)
   }
 
-  function handleMoveStepChange(nextStep: MoveStepKey): void {
-    setMoveStepKey(nextStep)
-  }
-
-  function handleMovementModeChange(nextMode: MovementMode): void {
-    setMovementMode(nextMode)
-  }
-
   function handleControlMenuCompactToggle(): void {
     setIsControlMenuCompact((currentState) => !currentState)
   }
-
-  const setIdleNotesKeyboardCaret = useCallback((nextCaret: number) => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    window.requestAnimationFrame(() => {
-      const input = idleNotesInputRef.current
-      if (input === null) {
-        return
-      }
-      input.focus()
-      input.setSelectionRange(nextCaret, nextCaret)
-    })
-  }, [])
-
-  const handleIdleNotesChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
-    setIdleNotesText(event.target.value)
-  }, [])
-
-  const handleIdleNotesKeyboardOpen = useCallback(() => {
-    setActiveKeyboardTarget('idleNotes')
-  }, [])
-
-  const handleKeyboardClose = useCallback(() => {
-    setActiveKeyboardTarget(null)
-  }, [])
 
   function handleVirtualKeyboardKeyMouseDown(event: MouseEvent<HTMLButtonElement>): void {
     event.preventDefault()
@@ -579,7 +370,7 @@ function App() {
   }
 
   function handleMotorsDisable(): void {
-    void executeCommand({ command: 'consoleGcode', gcode: 'M84' })
+    void executeCommand({ command: 'disableMotors' })
   }
 
   const handleVirtualKeyboardLanguageToggle = useCallback(() => {
@@ -591,57 +382,12 @@ function App() {
   }, [])
 
   const handleVirtualKeyboardKey = useCallback((key: string) => {
-    if (activeKeyboardTarget === null) {
+    if (activeKeyboardTarget === null || !isSettingsKeyboardTarget(activeKeyboardTarget)) {
       return
     }
 
-    if (isSettingsKeyboardTarget(activeKeyboardTarget)) {
-      settingsKeyboard.onKeyPress(key)
-      return
-    }
-
-    if (key === 'close') {
-      setActiveKeyboardTarget(null)
-      return
-    }
-
-    const input = idleNotesInputRef.current
-    const currentValue = idleNotesText
-    const selectionStart = input?.selectionStart ?? currentValue.length
-    const selectionEnd = input?.selectionEnd ?? currentValue.length
-    let nextValue = currentValue
-    let nextCaret = selectionStart
-
-    if (key === 'backspace') {
-      if (selectionStart !== selectionEnd) {
-        nextValue = `${currentValue.slice(0, selectionStart)}${currentValue.slice(selectionEnd)}`
-        nextCaret = selectionStart
-      } else if (selectionStart > 0) {
-        nextValue = `${currentValue.slice(0, selectionStart - 1)}${currentValue.slice(selectionStart)}`
-        nextCaret = selectionStart - 1
-      }
-    } else {
-      const insertValue = key === 'space'
-        ? ' '
-        : key === 'enter'
-          ? '\n'
-          : key
-      nextValue = `${currentValue.slice(0, selectionStart)}${insertValue}${currentValue.slice(selectionEnd)}`
-      nextCaret = selectionStart + insertValue.length
-    }
-
-    if (nextValue === currentValue) {
-      setIdleNotesKeyboardCaret(nextCaret)
-      return
-    }
-
-    setIdleNotesText(nextValue)
-    setIdleNotesKeyboardCaret(nextCaret)
-  }, [activeKeyboardTarget, idleNotesText, setIdleNotesKeyboardCaret, settingsKeyboard])
-  const isIdleNotesKeyboardOpen = activeKeyboardTarget === 'idleNotes'
-  const handleIdleNotesKeyboardClose = handleKeyboardClose
-  const handleIdleNotesKeyMouseDown = handleVirtualKeyboardKeyMouseDown
-  const handleIdleNotesVirtualKey = handleVirtualKeyboardKey
+    settingsKeyboard.onKeyPress(key)
+  }, [activeKeyboardTarget, settingsKeyboard])
 
   useEffect(() => {
     if (selectedPrintFile === null || typeof window === 'undefined') {
@@ -761,136 +507,110 @@ function App() {
       onButtonRef={setTopButtonRef}
     />
   )
+  const dashboardProps: DashboardContainerProps = {
+    chrome: {
+      statusDock: dashboardStatusDock,
+      logoSrc: treeDLogoAsset,
+    },
+    print: {
+      hasActivePrint,
+      displayPrintFileName,
+      printFill,
+      adjustedEtaTime,
+      displayLayerCurrent,
+      displayLayerTotal,
+      isPrintPaused,
+      printPauseCommand,
+      pendingCommand,
+      isBusy,
+      printCancelBlockReason,
+    },
+    tune: {
+      temperatureTargets: dashboardTemperatureTargets,
+      printFanPercent,
+      createQuickMetrics,
+      processMetrics,
+      babystepStep,
+      zOffsetMm: snapshot.runtimeTune.appliedBabystepMm,
+    },
+    idle: {
+      idleHeroStatusLabel,
+      idleWidgetOrder: dashboardIdleController.idleWidgetOrder,
+      armedIdleWidgetId: dashboardIdleController.armedIdleWidgetId,
+      draggingIdleWidgetId: dashboardIdleController.draggingIdleWidgetId,
+      idleWidgetRefs: dashboardIdleController.idleWidgetRefs,
+      maintenanceSummary: maintenanceController.status,
+      idleNotesInputRef: dashboardIdleController.idleNotesInputRef,
+      idleNotesText: dashboardIdleController.idleNotesText,
+      isIdleNotesKeyboardOpen: dashboardIdleController.isIdleNotesKeyboardOpen,
+      idleNotesKeyboardRows: dashboardIdleController.idleNotesKeyboardRows,
+    },
+    actions: {
+      onPrintTuneGroupOpen: handlePrintTuneGroupOpen,
+      onPause: () => void printSessionCommandHandlers.togglePause(),
+      onStopRequest: () => void printSessionCommandHandlers.requestStop(),
+      onBabystepStepChange: setBabystepStep,
+      onBabystepAdjust: handleBabystepAdjust,
+      onIdleWidgetTargetOpen: dashboardIdleController.openIdleWidgetTarget,
+      onIdleWidgetDragPointerDown: dashboardIdleController.handleIdleWidgetDragPointerDown,
+      onIdleWidgetDragPointerMove: dashboardIdleController.handleIdleWidgetDragPointerMove,
+      onIdleWidgetDragPointerEnd: dashboardIdleController.handleIdleWidgetDragPointerEnd,
+      onIdleWidgetDragHandleClick: dashboardIdleController.handleIdleWidgetDragHandleClick,
+      onIdleNotesKeyboardOpen: dashboardIdleController.handleIdleNotesKeyboardOpen,
+      onIdleNotesChange: dashboardIdleController.handleIdleNotesChange,
+      onIdleNotesKeyMouseDown: dashboardIdleController.handleIdleNotesKeyMouseDown,
+      onIdleNotesVirtualKey: dashboardIdleController.handleIdleNotesVirtualKey,
+      onIdleNotesKeyboardClose: dashboardIdleController.handleIdleNotesKeyboardClose,
+    },
+    getCommandBlockReason,
+  }
 
   return (
     <main className={`app-root ${isMaxPerformanceModeEnabled ? 'is-performance-mode' : ''}`}>
       <section className="screen-shell" data-testid="screen-shell" ref={screenShellRef}>
-        <div className={`content-grid ${isFilesScreenActive ? 'is-files-active' : ''} ${activeScreen === 'control' ? 'is-control-active' : ''}`}>
-          {activeScreen === 'dashboard' ? (
-            <DashboardPage
-              statusDock={dashboardStatusDock}
-              logoSrc={treeDLogoAsset}
-              hasActivePrint={hasActivePrint}
-              displayPrintFileName={displayPrintFileName}
-              printFill={printFill}
-              adjustedEtaTime={adjustedEtaTime}
-              displayLayerCurrent={displayLayerCurrent}
-              displayLayerTotal={displayLayerTotal}
-              temperatureTargets={dashboardTemperatureTargets}
-              quickMetrics={quickMetrics}
-              processMetrics={processMetrics}
-              isPrintPaused={isPrintPaused}
-              pendingCommand={pendingCommand}
-              isBusy={isBusy}
-              printPauseBlockReason={printPauseBlockReason}
-              printCancelBlockReason={printCancelBlockReason}
-              babystepStep={babystepStep}
-              babystepActiveIndex={babystepActiveIndex}
-              zOffsetMm={snapshot.runtimeTune.appliedBabystepMm}
-              babystepBlockReason={babystepBlockReason}
-              idleHeroStatusLabel={idleHeroStatusLabel}
-              idleWidgetOrder={idleWidgetOrder}
-              armedIdleWidgetId={armedIdleWidgetId}
-              draggingIdleWidgetId={draggingIdleWidgetId}
-              idleWidgetRefs={idleWidgetRefs}
-              maintenanceSummary={MAINTENANCE_STATUS}
-              idleNotesInputRef={idleNotesInputRef}
-              idleNotesText={idleNotesText}
-              isIdleNotesKeyboardOpen={isIdleNotesKeyboardOpen}
-              idleNotesKeyboardRows={IDLE_NOTES_KEYBOARD_ROWS}
-              onPrintTuneGroupOpen={handlePrintTuneGroupOpen}
-              onPause={() => void printSessionCommandHandlers.togglePause()}
-              onStopRequest={() => void printSessionCommandHandlers.requestStop()}
-              onBabystepStepChange={setBabystepStep}
-              onBabystepAdjust={handleBabystepAdjust}
-              onIdleWidgetTargetOpen={openIdleWidgetTarget}
-              onIdleWidgetDragPointerDown={handleIdleWidgetDragPointerDown}
-              onIdleWidgetDragPointerMove={handleIdleWidgetDragPointerMove}
-              onIdleWidgetDragPointerEnd={handleIdleWidgetDragPointerEnd}
-              onIdleWidgetDragHandleClick={handleIdleWidgetDragHandleClick}
-              onIdleNotesKeyboardOpen={handleIdleNotesKeyboardOpen}
-              onIdleNotesChange={handleIdleNotesChange}
-              onIdleNotesKeyMouseDown={handleIdleNotesKeyMouseDown}
-              onIdleNotesVirtualKey={handleIdleNotesVirtualKey}
-              onIdleNotesKeyboardClose={handleIdleNotesKeyboardClose}
-            />
-          ) : isFilesScreenActive ? (
-            <FilesPage files={effectiveFilesLibrary} onFileSelect={handlePrintFileSelect} />
-          ) : activeScreen === 'control' ? (
-            <ControlPage
-              activeControlGroup={activeControlGroup}
-              isControlMenuCompact={isControlMenuCompact}
-              onControlGroupChange={setActiveControlGroup}
-              onControlMenuCompactToggle={handleControlMenuCompactToggle}
-              movement={{
-                pendingCommand,
-                isBusy,
-                activeControlFlashKey,
-                movementMode,
-                moveStepKey,
-                commandBlockReasons: movementCommandBlockReasons,
-                zBounds: HEAD_Z_BOUNDS_MM,
-                onParkingTargetSelect: handleParkingTargetSelect,
-                onServiceModeToggle: handleServiceModeToggle,
-                onMotorsDisable: handleMotorsDisable,
-                onMovementModeChange: handleMovementModeChange,
-                onMoveStepChange: handleMoveStepChange,
-                onAxisMove: handleAxisMove,
-                onFilamentMove: handleFilamentMove,
-              }}
-              heating={heatingProps}
-              fan={fanProps}
-              lighting={{
-                isMainLightEnabled,
-                isToolheadLightEnabled,
-                onMainLightToggle: () => setIsMainLightEnabled((current) => !current),
-                onToolheadLightToggle: () => setIsToolheadLightEnabled((current) => !current),
-              }}
-              maintenance={{
-                status: MAINTENANCE_STATUS,
-                historyItems: MAINTENANCE_HISTORY_ITEMS,
-                checklistItems: MAINTENANCE_CHECKLIST_ITEMS,
-                progressTicks: MAINTENANCE_PROGRESS_TICKS,
-                progressPercent: maintenanceProgressPercent,
-                checklistState: maintenanceChecklistState,
-                isChecklistComplete: isMaintenanceChecklistComplete,
-                onChecklistItemChange: (itemId, checked) => {
-                  setMaintenanceChecklistState((current) => ({
-                    ...current,
-                    [itemId]: checked,
-                  }))
-                },
-                onChecklistComplete: () => setMaintenanceChecklistState(createMaintenanceChecklistState(true)),
-              }}
-            />
-          ) : activeScreen === 'settings' ? (
-            <SettingsPage {...settingsPageProps} />
-          ) : (
-            <section className="screen-placeholder" data-testid={`screen-${activeScreen}`}>
-              <p className="screen-placeholder-body">
-                {SCREEN_PLACEHOLDERS[activeScreen as keyof typeof SCREEN_PLACEHOLDERS]?.description ?? ''}
-              </p>
-            </section>
-          )}
-        </div>
-
-        <nav
-          className="bottom-nav"
-          aria-label="Основная навигация"
-          style={{ '--nav-active-index': String(activeNavIndex) } as CSSProperties}
-        >
-          <span className="bottom-nav-indicator" aria-hidden="true" />
-          {BOTTOM_NAV_ITEMS.map((item) => (
-            <NavItemButton
-              key={item.id}
-              label={item.label}
-              icon={item.icon}
-              active={item.id === activeScreen}
-              aria-current={item.id === activeScreen ? 'page' : undefined}
-              onClick={() => handleScreenSelect(item.id)}
-            />
-          ))}
-        </nav>
+        <AppScreenContent
+          activeScreen={activeScreen}
+          isFilesScreenActive={isFilesScreenActive}
+          onScreenSelect={handleScreenSelect}
+          dashboard={dashboardProps}
+          files={{
+            files: effectiveFilesLibrary,
+            onFileSelect: handlePrintFileSelect,
+          }}
+          control={{
+            activeControlGroup,
+            isControlMenuCompact,
+            pendingCommand,
+            isBusy,
+            activeControlFlashKey,
+            movementMode,
+            moveStepKey,
+            getCommandBlockReason,
+            onControlGroupChange: setActiveControlGroup,
+            onControlMenuCompactToggle: handleControlMenuCompactToggle,
+            onParkingTargetSelect: handleParkingTargetSelect,
+            onServiceModeToggle: handleServiceModeToggle,
+            onMotorsDisable: handleMotorsDisable,
+            onMovementModeChange: setMovementMode,
+            onMoveStepChange: setMoveStepKey,
+            onAxisMove: handleAxisMove,
+            onFilamentMove: handleFilamentMove,
+            heating: heatingProps,
+            fan: fanProps,
+            isMainLightEnabled,
+            isToolheadLightEnabled,
+            onMainLightEnabledChange: setIsMainLightEnabled,
+            onToolheadLightEnabledChange: setIsToolheadLightEnabled,
+            maintenanceStatus: maintenanceController.status,
+            maintenanceHistoryItems: maintenanceController.historyItems,
+            maintenanceChecklistItems: maintenanceController.checklistItems,
+            maintenanceProgressTicks: maintenanceController.progressTicks,
+            maintenanceChecklistState: maintenanceController.checklistState,
+            onMaintenanceChecklistItemChange: maintenanceController.handleChecklistItemChange,
+            onMaintenanceChecklistComplete: maintenanceController.handleChecklistComplete,
+          }}
+          settings={settingsPageProps}
+        />
 
         {activeKeyboardTarget !== null && activeKeyboardTarget !== 'idleNotes' ? (
           <div
