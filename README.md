@@ -104,3 +104,58 @@ ssh -N -L 7125:127.0.0.1:7125 pi@192.168.0.21
 
 - Целевое разрешение интерфейса: `960x544`.
 - Источник истины по состоянию принтера: Moonraker.
+
+
+Порядок действий такой:
+
+1. В `treed-shell` довести UI до нужного состояния.
+2. Запустить/проверить `npm run build` при необходимости.
+3. Закоммитить и смержить/запушить в `main`.
+4. GitHub Actions в `treed-shell` сам соберет `treed-shell-ui.zip`.
+5. Убедиться, что в GitHub Release появился asset `treed-shell-ui.zip`.
+6. В `treed-mainshellOS` закоммитить новый loader-контур.
+7. На принтере запустить/обновить loader.
+8. Loader скачает актуальный `treed-shell-ui.zip`, распакует и перезапустит `treed-shell.service`.
+
+Как теперь работает система:
+
+`treed-shell` больше не должен собираться на принтере. Это репозиторий, где живет UI. Он собирает готовый static bundle.
+
+`packages/printer-logic` просто встраивается в UI при сборке. Отдельно на принтер он не ставится.
+
+`apps/web-ui` сейчас не участвует в принтере. Это ручной playground, его можно игнорировать.
+
+`treed-mainshellOS` отвечает за устройство: loader, systemd, fallback, Moonraker, Klipper, экранный runtime.
+
+На принтере `treed-shell-install.sh` делает так:
+
+```text
+GitHub Release
+  -> treed-shell-ui.zip
+  -> распаковка в runtime dir
+  -> локальный python http.server на 127.0.0.1:8787
+  -> Chromium в kiosk mode
+  -> treed-shell.service
+```
+
+Сам UI внутри браузера обращается к Moonraker:
+
+```text
+TreeD Shell UI
+  -> Moonraker 127.0.0.1:7125
+  -> Klipper / macros / host components
+  -> принтер
+```
+
+Переключение UI остается простым:
+
+```bash
+sudo treed-ui ts
+sudo treed-ui ks
+treed-ui status
+```
+
+`ts` включает TreeD Shell.  
+`ks` возвращает KlipperScreen как fallback.
+
+Главная мысль: теперь на принтере не должно быть `npm ci`, Rust и Tauri-сборки для UI. Принтер только ставит готовый артефакт.
