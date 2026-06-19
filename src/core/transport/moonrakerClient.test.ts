@@ -312,4 +312,39 @@ describe('createMoonrakerClient', () => {
 
     expect(metadataRequestCount).toBe(5)
   })
+
+  it('keeps the full file list but limits metadata lookups per snapshot', async () => {
+    const files = Array.from({ length: 30 }, (_item, index) => ({
+      path: `queue/part-${index}.gcode`,
+      modified: 1_800_000_000 + index,
+      size: 1_024 + index,
+    }))
+    const metadataUrls: string[] = []
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/printer/objects/query')) {
+        return Promise.resolve(moonrakerResponse(runtimeObjects()))
+      }
+
+      if (url.includes('/server/files/list')) {
+        return Promise.resolve(moonrakerResponse(files))
+      }
+
+      metadataUrls.push(url)
+      return Promise.resolve(moonrakerResponse({
+        estimated_time: 1200,
+        filament_total: 300,
+      }))
+    })
+    const client = createMoonrakerClient({
+      moonrakerUrl: 'http://moonraker.local',
+      fetchImpl: fetchMock as typeof fetch,
+    })
+
+    const snapshot = await client.fetchSnapshot()
+
+    expect(snapshot.printFiles).toHaveLength(30)
+    expect(metadataUrls).toHaveLength(24)
+    expect(metadataUrls[0]).toContain('queue%2Fpart-0.gcode')
+    expect(metadataUrls.at(-1)).toContain('queue%2Fpart-23.gcode')
+  })
 })

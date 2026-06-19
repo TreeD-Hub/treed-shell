@@ -23,6 +23,7 @@ type MoonrakerClientOptions = {
   fetchImpl?: typeof fetch
   fetchTimeoutMs?: number
   metadataConcurrency?: number
+  metadataFileLimit?: number
 }
 
 type MoonrakerFetchContext = Required<MoonrakerClientOptions> & {
@@ -50,6 +51,7 @@ type MoonrakerFileListItem = {
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8_000
 const DEFAULT_METADATA_CONCURRENCY = 4
+const DEFAULT_METADATA_FILE_LIMIT = 24
 
 export class MoonrakerTransportError extends Error {
   readonly kind: MoonrakerTransportErrorKind
@@ -155,11 +157,19 @@ async function mapWithConcurrency<T, U>(
 async function fetchPrintFileWithMetadata(
   item: MoonrakerFileListItem,
   context: MoonrakerFetchContext,
+  shouldFetchMetadata = true,
 ): Promise<MoonrakerPrintFileInput> {
   const path = getMoonrakerFilePath(item)
 
   if (!path.toLowerCase().endsWith('.gcode')) {
     return item
+  }
+
+  if (!shouldFetchMetadata) {
+    return {
+      ...item,
+      path,
+    }
   }
 
   const cacheKey = getMetadataCacheKey(path, item)
@@ -194,11 +204,24 @@ async function fetchPrintFileWithMetadata(
 
 async function fetchPrintFiles(context: MoonrakerFetchContext): Promise<MoonrakerPrintFileInput[]> {
   const items = await fetchMoonraker<MoonrakerFileListItem[]>('/server/files/list?root=gcodes', context)
+  let metadataFileBudget = Math.max(0, context.metadataFileLimit)
+  const plannedItems = items.map((item) => {
+    const path = getMoonrakerFilePath(item)
+    const shouldFetchMetadata = path.toLowerCase().endsWith('.gcode') && metadataFileBudget > 0
+    if (shouldFetchMetadata) {
+      metadataFileBudget -= 1
+    }
+
+    return {
+      item,
+      shouldFetchMetadata,
+    }
+  })
 
   return mapWithConcurrency(
-    items,
+    plannedItems,
     context.metadataConcurrency,
-    (item) => fetchPrintFileWithMetadata(item, context),
+    ({ item, shouldFetchMetadata }) => fetchPrintFileWithMetadata(item, context, shouldFetchMetadata),
   )
 }
 
@@ -240,6 +263,7 @@ export function createMoonrakerClient(options: MoonrakerClientOptions = {}): Tra
     fetchImpl: options.fetchImpl ?? fetch,
     fetchTimeoutMs: options.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
     metadataConcurrency: options.metadataConcurrency ?? DEFAULT_METADATA_CONCURRENCY,
+    metadataFileLimit: options.metadataFileLimit ?? DEFAULT_METADATA_FILE_LIMIT,
     metadataCache: new Map(),
   }
 
