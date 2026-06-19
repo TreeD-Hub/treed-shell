@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createCommandClient } from '#runtime'
 import { getTreeDCommandBlockReason, type TreeDCommandRuntimeContext } from './catalog'
 import type { CommandResult, ExecuteCommandArgs, PrinterCommandId } from './types'
@@ -8,6 +8,7 @@ type QueuedCoalescedCommand = {
   resolve: (value: boolean) => void
 }
 
+const COALESCED_COMMAND_RATE_LIMIT_MS = 120
 const COALESCED_COMMANDS = new Set<PrinterCommandId>([
   'setFanPercent',
   'setPrintSpeedFactorPercent',
@@ -31,6 +32,8 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
   const [lastResult, setLastResult] = useState<CommandResult | null>(null)
   const activeCommandRef = useRef<PrinterCommandId | null>(null)
   const queuedCoalescedCommandsRef = useRef<Map<PrinterCommandId, QueuedCoalescedCommand>>(new Map())
+  const coalescedCommandTimersRef = useRef<Map<PrinterCommandId, number>>(new Map())
+  const lastCoalescedCommandRunAtRef = useRef<Map<PrinterCommandId, number>>(new Map())
   const runtimeContextRef = useRef(runtimeContext)
 
   const client = useMemo(() => {
@@ -43,35 +46,72 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
     async (args: ExecuteCommandArgs): Promise<boolean> => {
       const { command } = args
 
-      function runQueuedCommand(): void {
+      function runQueuedCommand(commandToRun?: PrinterCommandId): void {
         if (activeCommandRef.current !== null) {
           return
         }
 
-        const nextEntry = queuedCoalescedCommandsRef.current.entries().next().value
-        if (nextEntry === undefined) {
+        const nextEntry = commandToRun === undefined
+          ? queuedCoalescedCommandsRef.current.entries().next().value
+          : [commandToRun, queuedCoalescedCommandsRef.current.get(commandToRun)] as const
+        if (nextEntry === undefined || nextEntry[1] === undefined) {
           return
         }
 
         const [queuedCommand, queued] = nextEntry
         queuedCoalescedCommandsRef.current.delete(queuedCommand)
+        const timerId = coalescedCommandTimersRef.current.get(queuedCommand)
+        if (timerId !== undefined) {
+          window.clearTimeout(timerId)
+          coalescedCommandTimersRef.current.delete(queuedCommand)
+        }
         void executeCommand(queued.args).then(queued.resolve)
+      }
+
+      function scheduleQueuedCommand(queuedCommand: PrinterCommandId, delayMs: number): void {
+        if (coalescedCommandTimersRef.current.has(queuedCommand)) {
+          return
+        }
+
+        const timerId = window.setTimeout(() => {
+          coalescedCommandTimersRef.current.delete(queuedCommand)
+          runQueuedCommand(queuedCommand)
+        }, delayMs)
+        coalescedCommandTimersRef.current.set(queuedCommand, timerId)
+      }
+
+      function queueCoalescedCommand(delayMs?: number): Promise<boolean> {
+        const previousQueuedCommand = queuedCoalescedCommandsRef.current.get(command)
+        previousQueuedCommand?.resolve(false)
+
+        return new Promise<boolean>((resolve) => {
+          queuedCoalescedCommandsRef.current.set(command, {
+            args,
+            resolve,
+          })
+
+          if (delayMs !== undefined) {
+            scheduleQueuedCommand(command, delayMs)
+          }
+        })
       }
 
       if (activeCommandRef.current !== null) {
         if (isCoalescedCommand(command)) {
-          const previousQueuedCommand = queuedCoalescedCommandsRef.current.get(command)
-          previousQueuedCommand?.resolve(false)
-
-          return new Promise<boolean>((resolve) => {
-            queuedCoalescedCommandsRef.current.set(command, {
-              args,
-              resolve,
-            })
-          })
+          return queueCoalescedCommand()
         }
 
         return false
+      }
+
+      if (isCoalescedCommand(command)) {
+        const lastRunAt = lastCoalescedCommandRunAtRef.current.get(command)
+        if (lastRunAt !== undefined) {
+          const delayMs = COALESCED_COMMAND_RATE_LIMIT_MS - (Date.now() - lastRunAt)
+          if (delayMs > 0) {
+            return queueCoalescedCommand(delayMs)
+          }
+        }
       }
 
       const blockReason = getTreeDCommandBlockReason(command, runtimeContextRef.current, args)
@@ -90,6 +130,9 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
       }
 
       activeCommandRef.current = command
+      if (isCoalescedCommand(command)) {
+        lastCoalescedCommandRunAtRef.current.set(command, Date.now())
+      }
       setPendingCommand(command)
       lastErrorRef.current = ''
       setError('')
@@ -117,6 +160,22 @@ export function usePrinterCommands(runtimeContext: TreeDCommandRuntimeContext) {
     },
     [client],
   )
+
+  useEffect(() => {
+    const coalescedCommandTimers = coalescedCommandTimersRef.current
+    const queuedCoalescedCommands = queuedCoalescedCommandsRef.current
+
+    return () => {
+      for (const timerId of coalescedCommandTimers.values()) {
+        window.clearTimeout(timerId)
+      }
+      coalescedCommandTimers.clear()
+      for (const queued of queuedCoalescedCommands.values()) {
+        queued.resolve(false)
+      }
+      queuedCoalescedCommands.clear()
+    }
+  }, [])
 
   const clearCommandError = useCallback(() => {
     lastErrorRef.current = ''

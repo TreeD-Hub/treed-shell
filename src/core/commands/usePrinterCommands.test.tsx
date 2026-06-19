@@ -1,6 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { usePrinterCommands } from './usePrinterCommands'
 import type { CommandResult, ExecuteCommandArgs } from './types'
@@ -89,6 +89,10 @@ describe('usePrinterCommands', () => {
     runtimeMocks.execute.mockReset()
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('coalesces repeated fan commands while a previous command is in flight', async () => {
     const firstResult = createDeferred<CommandResult>()
     runtimeMocks.execute
@@ -125,6 +129,55 @@ describe('usePrinterCommands', () => {
       expect(runtimeMocks.execute).toHaveBeenCalledTimes(2)
     })
     expect(runtimeMocks.execute).toHaveBeenNthCalledWith(2, { command: 'setFanPercent', percent: 70 })
+    await expect(supersededPromise).resolves.toBe(false)
+    await expect(latestPromise).resolves.toBe(true)
+  })
+
+  it('rate-limits repeated coalesced commands after a fast command completes', async () => {
+    runtimeMocks.execute.mockResolvedValue(success('setPrintSpeedFactorPercent'))
+    let api: PrinterCommandsApi | null = null
+
+    render(<Harness onReady={(nextApi) => {
+      api = nextApi
+    }} />)
+
+    await waitFor(() => {
+      expect(api).not.toBeNull()
+    })
+
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-18T00:00:00.000Z'))
+
+    let firstPromise!: Promise<boolean>
+    await act(async () => {
+      firstPromise = api!.executeCommand({ command: 'setPrintSpeedFactorPercent', percent: 100 })
+      await firstPromise
+    })
+
+    let supersededPromise!: Promise<boolean>
+    let latestPromise!: Promise<boolean>
+    await act(async () => {
+      supersededPromise = api!.executeCommand({ command: 'setPrintSpeedFactorPercent', percent: 105 })
+      latestPromise = api!.executeCommand({ command: 'setPrintSpeedFactorPercent', percent: 110 })
+    })
+
+    expect(runtimeMocks.execute).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      vi.advanceTimersByTime(119)
+    })
+    expect(runtimeMocks.execute).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      vi.advanceTimersByTime(1)
+      await latestPromise
+    })
+
+    expect(runtimeMocks.execute).toHaveBeenCalledTimes(2)
+    expect(runtimeMocks.execute).toHaveBeenNthCalledWith(2, {
+      command: 'setPrintSpeedFactorPercent',
+      percent: 110,
+    })
     await expect(supersededPromise).resolves.toBe(false)
     await expect(latestPromise).resolves.toBe(true)
   })
