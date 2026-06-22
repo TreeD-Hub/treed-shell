@@ -30,7 +30,7 @@ export function DashboardIdleView({
     : '—'
   const maintenanceDueLabel = maintenanceSummary.isRuntimeBacked
     ? `${maintenanceSummary.hoursLeft} ч`
-    : 'Не подключено'
+    : '—'
 
   return (
     <section className="dashboard-idle-screen" data-testid="screen-dashboard-idle">
@@ -75,7 +75,7 @@ export function DashboardIdleView({
                     <p className="idle-mini-label">Т.О</p>
                     <div className="idle-service-metrics">
                       <p><span>Пробег</span><strong>{maintenanceRuntimeLabel}</strong></p>
-                      <p><span>Т.О</span><strong>{maintenanceDueLabel}</strong></p>
+                      <p><span>До Т.О</span><strong>{maintenanceDueLabel}</strong></p>
                     </div>
                   </>
                 )}
