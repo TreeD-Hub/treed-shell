@@ -19,6 +19,7 @@ type MoonrakerCommandClientOptions = {
 }
 
 type MoonrakerEnvelope = {
+  result?: unknown
   error?: {
     message?: string
   }
@@ -43,13 +44,31 @@ async function parseMoonrakerError(response: Response): Promise<string> {
   return `HTTP ${response.status}`
 }
 
+async function parseMoonrakerEnvelope(response: Response): Promise<MoonrakerEnvelope | null> {
+  try {
+    return (await response.json()) as MoonrakerEnvelope
+  } catch {
+    return null
+  }
+}
+
+function formatUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 async function callMoonraker(
   path: string,
   body: unknown,
   options: Required<Pick<MoonrakerCommandClientOptions, 'fetchImpl' | 'fetchTimeoutMs' | 'moonrakerUrl'>>,
+  command?: ExecuteCommandArgs['command'],
 ): Promise<void> {
   const controller = new AbortController()
   let didTimeout = false
+  const logContext = {
+    command,
+    path,
+    body,
+  }
   const timeoutId = window.setTimeout(() => {
     didTimeout = true
     controller.abort()
@@ -67,28 +86,59 @@ async function callMoonraker(
   }
 
   let response: Response
+  console.debug('[treed-command] sending', logContext)
   try {
     response = await options.fetchImpl(`${options.moonrakerUrl}${path}`, init)
   } catch (error) {
     if (didTimeout || isAbortError(error)) {
-      throw new MoonrakerTransportError('timeout', `Moonraker request timed out after ${options.fetchTimeoutMs}ms`)
+      const timeoutError = new MoonrakerTransportError('timeout', `Moonraker request timed out after ${options.fetchTimeoutMs}ms`)
+      console.error('[treed-command] failed', {
+        ...logContext,
+        error: timeoutError.message,
+      })
+      throw timeoutError
     }
 
+    console.error('[treed-command] failed', {
+      ...logContext,
+      error: formatUnknownError(error),
+    })
     throw error
   } finally {
     window.clearTimeout(timeoutId)
   }
 
   if (!response.ok) {
-    throw new Error(await parseMoonrakerError(response))
+    const error = new Error(await parseMoonrakerError(response))
+    console.error('[treed-command] failed', {
+      ...logContext,
+      error: error.message,
+    })
+    throw error
   }
+
+  const payload = await parseMoonrakerEnvelope(response)
+  if (payload?.error?.message) {
+    const error = new Error(payload.error.message)
+    console.error('[treed-command] failed', {
+      ...logContext,
+      error: error.message,
+    })
+    throw error
+  }
+
+  console.debug('[treed-command] accepted', {
+    ...logContext,
+    response: payload,
+  })
 }
 
 function sendScript(
   script: string,
   options: Required<Pick<MoonrakerCommandClientOptions, 'fetchImpl' | 'fetchTimeoutMs' | 'moonrakerUrl'>>,
+  command?: ExecuteCommandArgs['command'],
 ): Promise<void> {
-  return callMoonraker('/printer/gcode/script', { script }, options)
+  return callMoonraker('/printer/gcode/script', { script }, options, command)
 }
 
 function mapFanPercentToM106(percent: number): number {
@@ -213,80 +263,81 @@ function executeMoonrakerCommand(
         `/printer/print/start?filename=${encodeURIComponent(filename)}`,
         undefined,
         options,
+        args.command,
       )
     }
     case 'pause':
-      return callMoonraker('/printer/print/pause', undefined, options)
+      return callMoonraker('/printer/print/pause', undefined, options, args.command)
     case 'resume':
-      return callMoonraker('/printer/print/resume', undefined, options)
+      return callMoonraker('/printer/print/resume', undefined, options, args.command)
     case 'cancel':
-      return callMoonraker('/printer/print/cancel', undefined, options)
+      return callMoonraker('/printer/print/cancel', undefined, options, args.command)
     case 'emergencyStop':
-      return callMoonraker('/printer/emergency_stop', undefined, options)
+      return callMoonraker('/printer/emergency_stop', undefined, options, args.command)
     case 'home':
     case 'homeAll':
-      return sendScript('G28', options)
+      return sendScript('G28', options, args.command)
     case 'homeXY':
-      return sendScript('G28 X Y', options)
+      return sendScript('G28 X Y', options, args.command)
     case 'homeZ':
-      return sendScript('_TREED_EDDY_HOME_Z', options)
+      return sendScript('_TREED_EDDY_HOME_Z', options, args.command)
     case 'moveAxis': {
       const feedRateMmPerMin = args.feedRateMmPerMin ?? (args.speedMmS === undefined ? undefined : args.speedMmS * 60)
       const feedRate = feedRateMmPerMin !== undefined ? ` F${feedRateMmPerMin}` : ''
-      return sendScript(`G91\nG1 ${args.axis}${args.distanceMm}${feedRate}\nG90`, options)
+      return sendScript(`G91\nG1 ${args.axis}${args.distanceMm}${feedRate}\nG90`, options, args.command)
     }
     case 'setNozzleTarget':
-      return sendScript(`${args.wait ? 'M109' : 'M104'} S${args.targetCelsius}`, options)
+      return sendScript(`${args.wait ? 'M109' : 'M104'} S${args.targetCelsius}`, options, args.command)
     case 'setBedTarget':
-      return sendScript(`${args.wait ? 'M190' : 'M140'} S${args.targetCelsius}`, options)
+      return sendScript(`${args.wait ? 'M190' : 'M140'} S${args.targetCelsius}`, options, args.command)
     case 'setHeatingTargets':
-      return sendScript(`M104 S${args.nozzleCelsius}\nM140 S${args.bedCelsius}`, options)
+      return sendScript(`M104 S${args.nozzleCelsius}\nM140 S${args.bedCelsius}`, options, args.command)
     case 'turnOffHeaters':
-      return sendScript('TURN_OFF_HEATERS', options)
+      return sendScript('TURN_OFF_HEATERS', options, args.command)
     case 'setFanPercent':
-      return sendScript(`M106 S${mapFanPercentToM106(args.percent)}`, options)
+      return sendScript(`M106 S${mapFanPercentToM106(args.percent)}`, options, args.command)
     case 'setPrintSpeedFactorPercent':
-      return sendScript(`TREED_UI_SET_SPEED_FACTOR PERCENT=${args.percent}`, options)
+      return sendScript(`TREED_UI_SET_SPEED_FACTOR PERCENT=${args.percent}`, options, args.command)
     case 'setPrintFlowFactorPercent':
-      return sendScript(`TREED_UI_SET_FLOW_FACTOR PERCENT=${args.percent}`, options)
+      return sendScript(`TREED_UI_SET_FLOW_FACTOR PERCENT=${args.percent}`, options, args.command)
     case 'setPrintAccel':
-      return sendScript(`TREED_UI_SET_ACCEL ACCEL=${args.accelMmS2}`, options)
+      return sendScript(`TREED_UI_SET_ACCEL ACCEL=${args.accelMmS2}`, options, args.command)
     case 'setPressureAdvance':
-      return sendScript(`TREED_UI_SET_PRESSURE_ADVANCE ADVANCE=${args.advance}`, options)
+      return sendScript(`TREED_UI_SET_PRESSURE_ADVANCE ADVANCE=${args.advance}`, options, args.command)
     case 'setRetractionLength':
-      return sendScript(`TREED_UI_SET_RETRACTION RETRACT_LENGTH=${args.retractLengthMm}`, options)
+      return sendScript(`TREED_UI_SET_RETRACTION RETRACT_LENGTH=${args.retractLengthMm}`, options, args.command)
     case 'adjustZOffset':
-      return sendScript(`TREED_UI_ADJUST_Z_OFFSET DELTA=${args.deltaMm}`, options)
+      return sendScript(`TREED_UI_ADJUST_Z_OFFSET DELTA=${args.deltaMm}`, options, args.command)
     case 'loadFilament':
-      return sendScript(formatFilamentScript('LOAD_FILAMENT', args), options)
+      return sendScript(formatFilamentScript('LOAD_FILAMENT', args), options, args.command)
     case 'unloadFilament':
-      return sendScript(formatFilamentScript('UNLOAD_FILAMENT', args), options)
+      return sendScript(formatFilamentScript('UNLOAD_FILAMENT', args), options, args.command)
     case 'zParkZeroEddy':
-      return sendScript('TREED_Z_PARK_ZERO_EDDY', options)
+      return sendScript('TREED_Z_PARK_ZERO_EDDY', options, args.command)
     case 'shaperCalibrateLight':
-      return sendScript('TREED_SHAPER_CALIBRATE_LIGHT', options)
+      return sendScript('TREED_SHAPER_CALIBRATE_LIGHT', options, args.command)
     case 'shaperCalibrateFull':
-      return sendScript('TREED_SHAPER_CALIBRATE_FULL', options)
+      return sendScript('TREED_SHAPER_CALIBRATE_FULL', options, args.command)
     case 'xyMotionTest':
-      return sendScript('TREED_XY_MOTION_TEST', options)
+      return sendScript('TREED_XY_MOTION_TEST', options, args.command)
     case 'disableMotors':
-      return sendScript('M84', options)
+      return sendScript('M84', options, args.command)
     case 'consoleGcode':
-      return sendScript((args.script ?? args.gcode ?? '').trim(), options)
+      return sendScript((args.script ?? args.gcode ?? '').trim(), options, args.command)
     case 'rebootHost':
       if (options.capabilities.power !== true) {
         return buildUnsupportedResult(args.command, 'Host reboot is not supported through this Moonraker client')
       }
-      return callMoonraker('/machine/reboot', undefined, options)
+      return callMoonraker('/machine/reboot', undefined, options, args.command)
     case 'restartKlipper':
-      return callMoonraker('/printer/restart', undefined, options)
+      return callMoonraker('/printer/restart', undefined, options, args.command)
     case 'firmwareRestart':
-      return callMoonraker('/printer/firmware_restart', undefined, options)
+      return callMoonraker('/printer/firmware_restart', undefined, options, args.command)
     case 'restartMoonraker':
-      return callMoonraker('/server/restart', undefined, options)
+      return callMoonraker('/server/restart', undefined, options, args.command)
     case 'shutdownHost':
       if (options.capabilities.power === true) {
-        return callMoonraker('/machine/shutdown', undefined, options)
+        return callMoonraker('/machine/shutdown', undefined, options, args.command)
       }
       return buildUnsupportedResult(
         args.command,

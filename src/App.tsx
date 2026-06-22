@@ -332,7 +332,6 @@ function App() {
     if (nextMode === 'axis') {
       setParkingAxis(resolvedAxis)
     }
-    flashControlAction(nextMode === 'all' ? 'parking-all' : `parking-${resolvedAxis}`)
 
     const command = nextMode === 'all' ? 'homeAll' : resolvedAxis === 'Z' ? 'homeZ' : 'homeXY'
     const ok = await executeCommand({ command })
@@ -341,6 +340,7 @@ function App() {
     }
 
     await refresh()
+    flashControlAction(nextMode === 'all' ? 'parking-all' : `parking-${resolvedAxis}`)
     return true
   }
 
@@ -575,6 +575,7 @@ function App() {
           dashboard={dashboardProps}
           files={{
             files: effectiveFilesLibrary,
+            fileListStatus: snapshot.fileList,
             onFileSelect: handlePrintFileSelect,
           }}
           control={{

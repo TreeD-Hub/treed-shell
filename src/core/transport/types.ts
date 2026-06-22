@@ -67,6 +67,11 @@ export interface PrinterFilesSnapshot {
   fileSize: number | null
 }
 
+export interface PrinterFileListStatusSnapshot {
+  state: 'unknown' | 'ready' | 'error'
+  message: string | null
+}
+
 export interface PrinterPrintJobSnapshot {
   filename: string
   filePath: string | null
@@ -130,6 +135,7 @@ export interface PrinterRuntimeSnapshot {
   capabilities: PrinterCapabilitiesSnapshot
   printJob: PrinterPrintJobSnapshot
   files: PrinterFilesSnapshot
+  fileList?: PrinterFileListStatusSnapshot
   toolhead: PrinterToolheadRuntimeSnapshot
   geometry: PrinterGeometrySnapshot
   thermalTargets: PrinterThermalTargetsSnapshot

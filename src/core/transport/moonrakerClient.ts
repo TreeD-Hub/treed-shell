@@ -39,7 +39,13 @@ type NormalizeMoonrakerSnapshotInput = {
   }
   objects?: MoonrakerObjectsQueryPayload
   files?: MoonrakerPrintFileInput[]
+  filesError?: string | null
   fileMetadata?: Record<string, MoonrakerPrintFileMetadata>
+}
+
+type PrintFilesFetchResult = {
+  files: MoonrakerPrintFileInput[]
+  error: string | null
 }
 
 type MoonrakerFileListItem = {
@@ -225,6 +231,16 @@ async function fetchPrintFiles(context: MoonrakerFetchContext): Promise<Moonrake
   )
 }
 
+async function fetchPrintFilesBestEffort(context: MoonrakerFetchContext): Promise<PrintFilesFetchResult> {
+  try {
+    return { files: await fetchPrintFiles(context), error: null }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn('[treed-runtime] file list unavailable', message)
+    return { files: [], error: message }
+  }
+}
+
 export function normalizeMoonrakerSnapshot(input: NormalizeMoonrakerSnapshotInput): PrinterSnapshot {
   const status = input.objects?.status ?? {}
   const files = (input.files ?? []).map((file) => {
@@ -253,6 +269,7 @@ export function normalizeMoonrakerSnapshot(input: NormalizeMoonrakerSnapshotInpu
       moonrakerUrl: input.moonrakerUrl,
       nowIso: input.nowIso,
       printFiles: files,
+      printFilesError: input.filesError,
     },
   )
 }
@@ -269,12 +286,17 @@ export function createMoonrakerClient(options: MoonrakerClientOptions = {}): Tra
 
   return {
     async fetchSnapshot(): Promise<PrinterSnapshot> {
-      const [objects, printFiles] = await Promise.all([
+      const [objects, printFilesResult] = await Promise.all([
         fetchMoonraker<MoonrakerObjectsQueryPayload>(MOONRAKER_RUNTIME_OBJECTS_QUERY, context),
-        fetchPrintFiles(context),
+        fetchPrintFilesBestEffort(context),
       ])
 
-      return normalizeMoonrakerRuntimeSnapshot(objects, { moonrakerUrl: context.moonrakerUrl, source: 'live', printFiles })
+      return normalizeMoonrakerRuntimeSnapshot(objects, {
+        moonrakerUrl: context.moonrakerUrl,
+        source: 'live',
+        printFiles: printFilesResult.files,
+        printFilesError: printFilesResult.error,
+      })
     },
     subscribe(handlers) {
       return subscribeToMoonrakerStatus(handlers, { moonrakerUrl: context.moonrakerUrl })

@@ -347,4 +347,27 @@ describe('createMoonrakerClient', () => {
     expect(metadataUrls[0]).toContain('queue%2Fpart-0.gcode')
     expect(metadataUrls.at(-1)).toContain('queue%2Fpart-23.gcode')
   })
+
+  it('keeps runtime snapshot usable when Moonraker file list fails', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/printer/objects/query')) {
+        return Promise.resolve(moonrakerResponse(runtimeObjects()))
+      }
+
+      return Promise.resolve(moonrakerHttpError(503))
+    })
+    const client = createMoonrakerClient({
+      moonrakerUrl: 'http://moonraker.local',
+      fetchImpl: fetchMock as typeof fetch,
+    })
+
+    const snapshot = await client.fetchSnapshot()
+
+    expect(snapshot.connection).toBe('online')
+    expect(snapshot.printFiles).toEqual([])
+    expect(snapshot.fileList).toEqual({
+      state: 'error',
+      message: 'Moonraker 503',
+    })
+  })
 })

@@ -113,6 +113,7 @@ export interface MoonrakerNormalizeOptions {
   moonrakerUrl?: string
   wifiSsid?: string
   printFiles?: MoonrakerPrintFileInput[]
+  printFilesError?: string | null
   nowIso?: string
 }
 
@@ -642,6 +643,10 @@ export function normalizeMoonrakerRuntimeSnapshot(
           filePosition: 0,
           fileSize: null,
         },
+    fileList: {
+      state: options.printFilesError ? 'error' : options.printFiles === undefined ? 'unknown' : 'ready',
+      message: options.printFilesError ?? null,
+    },
     toolhead: normalizeToolheadRuntime(toolhead, homedAxes, macros),
     geometry: {
       toolhead,

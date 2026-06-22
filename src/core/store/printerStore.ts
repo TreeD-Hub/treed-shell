@@ -70,6 +70,10 @@ export const FALLBACK_PRINTER_SNAPSHOT: PrinterSnapshot = {
     filePosition: 0,
     fileSize: null,
   },
+  fileList: {
+    state: 'unknown',
+    message: null,
+  },
   toolhead: {
     rawX: 0,
     rawY: 0,

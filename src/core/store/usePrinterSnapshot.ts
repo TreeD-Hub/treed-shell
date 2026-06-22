@@ -15,6 +15,7 @@ function mergeWebSocketSnapshot(previous: PrinterSnapshot, next: PrinterSnapshot
   return {
     ...next,
     printFiles: next.printFiles.length > 0 ? next.printFiles : previous.printFiles,
+    fileList: next.fileList?.state === 'unknown' ? previous.fileList : next.fileList ?? previous.fileList,
   }
 }
 
