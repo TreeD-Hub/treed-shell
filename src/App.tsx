@@ -60,13 +60,14 @@ const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
 }
 
 function App() {
-  const { snapshot, refresh } = usePrinterSnapshot()
+  const { snapshot, refresh, deletePrintFile } = usePrinterSnapshot()
   const screenShellRef = useRef<HTMLElement | null>(null)
   const [babystepStep, setBabystepStep] = useState<number>(BABYSTEP_STEP_OPTIONS[1])
   const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
-  const printSessionController = usePrintSessionController({ snapshot })
+  const printSessionController = usePrintSessionController({ snapshot, deletePrintFile })
   const commandRuntimeContext = useMemo(
     () => ({
+      source: snapshot.source,
       capabilities: snapshot.capabilities,
       connection: snapshot.connection,
       printJob: printSessionController.commandRuntimePrintJob,
@@ -78,13 +79,20 @@ function App() {
       },
       eddyStatus: snapshot.v2.eddy.status,
       extruderTemp: snapshot.extruderTemp,
+      limits: snapshot.limits,
+      thermalTargets: snapshot.thermalTargets,
+      modelFanPercent: snapshot.modelFanPercent,
     }),
     [
       printSessionController.commandRuntimePrintJob,
+      snapshot.source,
       snapshot.capabilities,
       snapshot.connection,
       snapshot.extruderTemp,
       snapshot.homedAxes,
+      snapshot.limits,
+      snapshot.modelFanPercent,
+      snapshot.thermalTargets,
       snapshot.toolhead.rawX,
       snapshot.toolhead.rawY,
       snapshot.toolhead.rawZ,

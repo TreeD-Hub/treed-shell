@@ -1,4 +1,9 @@
 import { moonrakerUrl } from '../../config'
+import {
+  getTreeDCommandArgumentError,
+  TREED_V2_COREXY_V1_LIMITS,
+  type PrinterLimits,
+} from '@treed/printer-logic'
 import { MoonrakerTransportError } from '../transport/moonrakerClient'
 import type {
   CommandClient,
@@ -16,6 +21,7 @@ type MoonrakerCommandClientOptions = {
   fetchImpl?: typeof fetch
   fetchTimeoutMs?: number
   capabilities?: CommandCapabilityOptions
+  limits?: PrinterLimits
 }
 
 type MoonrakerEnvelope = {
@@ -249,8 +255,14 @@ function executeMoonrakerCommand(
   options: Required<Pick<MoonrakerCommandClientOptions, 'fetchImpl' | 'moonrakerUrl'>> & {
     fetchTimeoutMs: number
     capabilities: CommandCapabilityOptions
+    limits: PrinterLimits
   },
 ): Promise<void> | CommandUnsupportedResult {
+  const argumentError = getTreeDCommandArgumentError(args, options.limits)
+  if (argumentError !== null) {
+    throw new Error(argumentError)
+  }
+
   switch (args.command) {
     case 'start': {
       const filename = args.filename.trim()
@@ -283,8 +295,12 @@ function executeMoonrakerCommand(
       return sendScript('_TREED_EDDY_HOME_Z', options, args.command)
     case 'moveAxis': {
       const feedRateMmPerMin = args.feedRateMmPerMin ?? (args.speedMmS === undefined ? undefined : args.speedMmS * 60)
-      const feedRate = feedRateMmPerMin !== undefined ? ` F${feedRateMmPerMin}` : ''
-      return sendScript(`G91\nG1 ${args.axis}${args.distanceMm}${feedRate}\nG90`, options, args.command)
+      const feedRate = feedRateMmPerMin !== undefined ? ` FEEDRATE=${feedRateMmPerMin}` : ''
+      return sendScript(
+        `TREED_UI_MOVE_AXIS AXIS=${args.axis} DISTANCE=${args.distanceMm}${feedRate}`,
+        options,
+        args.command,
+      )
     }
     case 'setNozzleTarget':
       return sendScript(`${args.wait ? 'M109' : 'M104'} S${args.targetCelsius}`, options, args.command)
@@ -352,6 +368,7 @@ export function createMoonrakerCommandClient(options: MoonrakerCommandClientOpti
     fetchImpl: options.fetchImpl ?? fetch,
     fetchTimeoutMs: options.fetchTimeoutMs ?? DEFAULT_COMMAND_FETCH_TIMEOUT_MS,
     capabilities: options.capabilities ?? {},
+    limits: options.limits ?? TREED_V2_COREXY_V1_LIMITS,
   }
 
   return {
@@ -367,6 +384,7 @@ export function createMoonrakerCommandClient(options: MoonrakerCommandClientOpti
       return {
         command: args.command,
         ok: true,
+        status: 'accepted',
         message: commandSuccessMessage(args),
         at: new Date().toISOString(),
       }

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { TREED_V2_COREXY_V1_LIMITS } from '@treed/printer-logic'
 
 import type { ExecuteCommandArgs, PrinterCommandId } from '../core/commands'
 import { useHeatingFanController } from './useHeatingFanController'
@@ -19,6 +20,7 @@ const DEFAULT_SNAPSHOT: Parameters<typeof useHeatingFanController>[0]['snapshot'
     nozzle: 215,
     bed: 60,
   },
+  limits: TREED_V2_COREXY_V1_LIMITS,
 }
 
 function TestHarness({

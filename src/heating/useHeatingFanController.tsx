@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react'
 
 import type { ExecuteCommandArgs, PrinterCommandId } from '../core/commands'
 import type { PrinterConnectionState } from '../core/transport/types'
+import type { PrinterLimits } from '@treed/printer-logic'
 import type {
   FanControlPanelProps,
   HeatingCommandBlockReasons,
@@ -21,6 +22,7 @@ type HeatingSnapshot = {
     nozzle: number
     bed: number
   }
+  limits: PrinterLimits
 }
 
 type TemperatureHistoryPoint = {
@@ -111,7 +113,7 @@ export function useHeatingFanController({
 
       return [...currentHistory, nextPoint].slice(-MAX_TEMPERATURE_HISTORY_POINTS)
     })
-  }, [snapshot.bedTemp, snapshot.connection, snapshot.extruderTemp])
+  }, [snapshot])
 
   const temperatureChartSeries = useMemo<TemperatureChartSeries[]>(
     () => [
@@ -204,7 +206,10 @@ export function useHeatingFanController({
       return
     }
 
-    const normalized = Math.round(clampHeatingValue(parsed, 0, 300))
+    const maxCelsius = temperatureKeyboardTarget === 'nozzle'
+      ? snapshot.limits.nozzleMaxC
+      : snapshot.limits.bedMaxC
+    const normalized = Math.round(clampHeatingValue(parsed, 0, maxCelsius))
     const ok = await executeCommand({
       command: temperatureKeyboardTarget === 'nozzle' ? 'setNozzleTarget' : 'setBedTarget',
       targetCelsius: normalized,

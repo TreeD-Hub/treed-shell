@@ -113,7 +113,7 @@ describe('createMoonrakerCommandClient', () => {
       3,
       'http://moonraker.local/printer/gcode/script',
       expect.objectContaining({
-        body: JSON.stringify({ script: 'G91\nG1 X10 F3000\nG90' }),
+        body: JSON.stringify({ script: 'TREED_UI_MOVE_AXIS AXIS=X DISTANCE=10 FEEDRATE=3000' }),
       }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -207,6 +207,15 @@ describe('createMoonrakerCommandClient', () => {
         body: JSON.stringify({ script: 'TREED_UI_ADJUST_Z_OFFSET DELTA=-0.025' }),
       }),
     )
+  })
+
+  it('rejects invalid heating and movement arguments before transport', async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+    const client = createMoonrakerCommandClient({ fetchImpl })
+
+    await expect(client.execute({ command: 'setBedTarget', targetCelsius: 121 })).rejects.toThrow('0…120')
+    await expect(client.execute({ command: 'moveAxis', axis: 'X', distanceMm: Number.NaN })).rejects.toThrow('DISTANCE')
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
   it('rejects unsupported capability commands before hitting Moonraker', async () => {

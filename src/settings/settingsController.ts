@@ -5,6 +5,7 @@ import {
 } from '@treed/printer-logic'
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ExecuteCommandArgs, PrinterCommandId } from '../core/commands'
+import { downloadDiagnosticReport } from '../diagnostics'
 import {
   areHostNetworkStatusesEqual,
   createUnavailableHostNetworkStatus,
@@ -20,6 +21,7 @@ import {
   SLEEP_MODE_OPTIONS,
   TIMEZONE_OPTIONS,
   UPDATE_AVAILABLE_VERSION,
+  UPDATE_CURRENT_VERSION,
   type SettingsGroupId,
   type SettingsNotificationItem,
 } from './config'
@@ -539,6 +541,15 @@ export function useSettingsController({
   const pageProps: SettingsPageProps = {
     activeSettingsGroup,
     onSettingsGroupChange: setActiveSettingsGroup,
+    system: {
+      contractStatus: snapshot.uiContract.status === 'compatible'
+        ? `UI contract ${snapshot.uiContract.contractVersion}: совместим`
+        : snapshot.uiContract.status === 'legacy'
+          ? 'UI contract: legacy runtime'
+          : snapshot.uiContract.message ?? 'UI contract: несовместим',
+      runtimeStatus: `Transport: ${snapshot.transport.state}; Klippy: ${snapshot.klippy.state}`,
+      onExportDiagnostics: () => downloadDiagnosticReport(snapshot, UPDATE_CURRENT_VERSION),
+    },
     interfaceSettings: {
       isDarkThemeEnabled,
       isMaxPerformanceModeEnabled,
