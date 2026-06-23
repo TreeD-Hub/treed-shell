@@ -1,19 +1,31 @@
-﻿# `e2e`
+# `e2e`
 
-Playwright-тесты оболочки.
+Playwright smoke/layout проверки shell UI.
 
-Инварианты:
-- проверки выполняются в браузере Chromium;
-- базовый контракт экрана `960x544` должен оставаться валидным.
-- в цикле визуальной проверки обязателен артефакт-скрин `dashboard-shell.png`;
-- в цикле визуальной проверки обязателен геометрический анализ layout (границы/пересечения ключевых блоков).
+## Контракт
 
-Команда запуска:
+- Браузер: Chromium.
+- Viewport: `960x544`.
+- Web server: `vite --mode mock --host 127.0.0.1 --port 4173`.
+- Проверяется shell frame, Nothing-inspired visual contract, геометрия dashboard print-state и files screen.
 
-```bash
-npx playwright test
+## Команды
+
+```powershell
+npm run test:e2e
 npx playwright test e2e/shell-layout.spec.ts
 ```
 
-Артефакт скрина:
-- файл `dashboard-shell.png` сохраняется в `test-results/**` на каждом прогоне `npx playwright test e2e/shell-layout.spec.ts`.
+## Артефакты
+
+`e2e/shell-layout.spec.ts` сохраняет screenshots в `test-results/**`:
+
+- `dashboard-shell.png`
+- `files-library.png`
+
+## Инварианты
+
+- Ключевые блоки должны помещаться в `960x544`.
+- Нижняя навигация не должна пересекаться с основным контентом.
+- В files screen ожидается сетка 4 карточки в ряд и вертикальный scroll.
+- Визуальные проверки не заменяют device-run на реальном принтере.

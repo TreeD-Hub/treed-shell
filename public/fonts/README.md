@@ -1,20 +1,32 @@
 # `public/fonts`
 
-Шрифты, используемые веб-интерфейсом.
+Vendored шрифты и лицензии для UI.
 
-Содержимое:
-- `jetbrains-mono-variable.ttf` — `JetBrains Mono`, основной UI-шрифт для читаемого интерфейсного текста.
-- `jetbrains-mono-readme.txt` — оригинальный readme из архива `JetBrains_Mono`.
-- `jetbrains-mono-license.txt` — лицензия SIL Open Font License 1.1 для `JetBrains Mono`.
-- `nothing-font.otf` — `Nothing Font` (designer: Dmitriy Sychiov, https://fontstruct.com/fontstructions/show/2146737), акцентный UI-шрифт для брендовых и навигационных элементов.
-- `nothing-font-readme.txt` — оригинальный readme из архива `nothing-font.otf (1).zip`.
-- `nothing-font-license.txt` — лицензия SIL Open Font License 1.1 для `Nothing Font`.
+## Подключено сейчас
 
-Лицензия:
-- Для `JetBrains Mono`: `SIL Open Font License 1.1` (OFL-1.1), см. `jetbrains-mono-license.txt`.
-- Для `Nothing Font`: `SIL Open Font License 1.1` (OFL-1.1), см. `nothing-font-license.txt`.
+- `nothing-font.otf` - `Nothing Font`, accent font для брендовых элементов.
+- `jetbrains-mono-variable.ttf` - `JetBrains Mono`, основной UI mono font.
 
-Условия использования в коммерции:
-- коммерческое использование разрешено;
-- обязательна атрибуция автора;
-- при распространении шрифта и его модификаций сохранять условия `OFL-1.1` и текст лицензии.
+Оба шрифта подключаются в `src/styles/foundation.css` через `@font-face`.
+
+## Содержимое
+
+- `nothing-font.otf`
+- `nothing-font-readme.txt`
+- `nothing-font-license.txt`
+- `jetbrains-mono-variable.ttf`
+- `jetbrains-mono-readme.txt`
+- `jetbrains-mono-license.txt`
+- `handjet-variable.ttf`
+- `handjet-readme.txt`
+- `handjet-license.txt`
+
+`Handjet` сейчас сохранен как vendored font asset, но не подключен в `foundation.css`.
+
+## Лицензии
+
+- `JetBrains Mono`: SIL Open Font License 1.1, см. `jetbrains-mono-license.txt`.
+- `Nothing Font`: SIL Open Font License 1.1, см. `nothing-font-license.txt`.
+- `Handjet`: см. `handjet-license.txt`.
+
+При распространении шрифтов и модификаций сохранять соответствующие тексты лицензий.

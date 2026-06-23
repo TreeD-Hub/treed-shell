@@ -1,161 +1,169 @@
 # TreeD Shell
 
-Отдельная UI-оболочка для экрана принтера уровня KlipperScreen.
+UI-оболочка для сенсорного экрана принтера TreeD V2. Репозиторий хранит printer-facing React UI, Tauri shell, mock/live runtime и общий workspace-пакет доменной логики принтера.
 
-## Source of Truth (дизайн)
+## Source of Truth
 
-- Актуальный дизайн интерфейса хранится в Figma:
-  `https://www.figma.com/make/CzDoyJ43oL0Ep8vyd93mgl/TreeD-Screen-UI-Design?t=0wAzv9BIiNp87Erv-1&preview-route=%2Flandscape`
-- Любые правки UI должны проверяться на соответствие этому макету.
+- Текущая точка входа UI: `src/main.tsx`.
+- Верхнеуровневая композиция shell: `src/App.tsx` и `src/app/AppScreenContent.tsx`.
+- Целевой экран принтера: `960x544`, touch-first, без hover-only сценариев.
+- Источник состояния принтера в live-режиме: Moonraker на `VITE_MOONRAKER_URL` (`http://127.0.0.1:7125` по умолчанию).
+- Runtime на устройстве, loader, fallback и provider switch принадлежат `treed-mainshellOS`.
+- Production artifact для loader: `treed-shell-ui.zip` из GitHub Release.
 
-## Что в репозитории
+Дизайн-инварианты и токены: `docs/00_FOUNDATION.md`. Актуальный Figma-макет используется как визуальный референс:
+`https://www.figma.com/make/CzDoyJ43oL0Ep8vyd93mgl/TreeD-Screen-UI-Design?t=0wAzv9BIiNp87Erv-1&preview-route=%2Flandscape`
 
-- `src/` — UI-логика и экранные компоненты.
-- `src-tauri/` — нативная обертка и runtime-конфигурация Tauri.
-- `docs/` — foundation-токены, ADR и эксплуатационная документация.
-- `.vscode/` — локальные задачи запуска `tauri:dev/tauri:build`.
+## Структура
 
-## Инструменты
+- `src/` - основная Tauri/UI-shell оболочка: экраны, composition, transport/store/commands, runtime-facing слой.
+- `packages/printer-logic/` - общий TypeScript-пакет `@treed/printer-logic`: domain types, capabilities, file/network helpers, command catalog и block reasons.
+- `apps/web-ui/` - ручной Vite/React playground будущей вебморды; не production UI для принтера.
+- `mocks/` - mock runtime для `vite --mode mock`.
+- `src-tauri/` - Tauri 2 wrapper и printer overlay-конфиг.
+- `docs/` - foundation, ADR и runtime-контракты.
+- `e2e/` - Playwright smoke/layout проверки для `960x544`.
+- `.github/workflows/` - quality gate, logic build, UI release и ручной web UI release.
 
-- Node.js `20.x` (LTS)
-- npm `10+`
-- Rust toolchain (`rustc`, `cargo`) для Tauri
+Общая printer/domain-логика не дублируется в `src/**` или `apps/web-ui/**`: если правило нужно shell и будущей вебморде, оно живет в `packages/printer-logic/**`.
 
-## Быстрый старт (`tauri-only`)
+## Требования
 
-```bash
-npm install
+- Node.js `22.x` - версия CI/release workflows.
+- npm `10+`.
+- Rust toolchain (`rustc`, `cargo`) - только для Tauri dev/build.
+
+## Установка
+
+```powershell
+npm ci
+```
+
+## Локальный запуск
+
+```powershell
+npm run dev:mock
+npm run dev:live
+npm run dev:web-ui
+```
+
+- `dev:mock` собирает `packages/printer-logic` и запускает Vite с `mocks/runtime.ts`.
+- `dev:live` собирает `packages/printer-logic` и запускает Vite с `src/runtime/live.ts`.
+- `dev:web-ui` запускает `apps/web-ui` после сборки общей логики.
+
+Tauri:
+
+```powershell
 npm run tauri:dev
-```
-
-Сборка:
-
-```bash
-npm run tauri:build
-```
-
-Printer runtime profile:
-
-```bash
 npm run tauri:dev:printer
+npm run tauri:build
 npm run tauri:build:printer
 ```
 
-Этот профиль использует `src-tauri/tauri.printer.conf.json`: фиксированное окно `960x544`, без системной рамки, live-mode через `.env.live` и подключение к Moonraker на `http://127.0.0.1:7125`.
+- `tauri:dev` использует базовый `src-tauri/tauri.conf.json`: desktop-dev окно `1200x760`, mock Vite runtime.
+- `tauri:dev:printer` использует `src-tauri/tauri.printer.conf.json`: фиксированное окно `960x544`, без decorations, live runtime и CSP для Moonraker `127.0.0.1:7125`.
 
-## Monorepo layout
+## Проверки
 
-`treed-shell` теперь хранит весь UI-контур в одном репозитории:
+```powershell
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build:all
+npm run quality
+```
 
-- `packages/printer-logic` — общий TypeScript-пакет `@treed/printer-logic` с domain types, capabilities и каталогом команд;
-- `apps/web-ui` — Vite/React-заглушка будущей вебморды;
-- `src`, `src-tauri`, `mocks` — текущий printer shell UI, Tauri runtime и mock/live transport.
+- `typecheck` проверяет logic package, shell UI и web UI.
+- `test` запускает unit/integration tests для `packages/printer-logic` и `src`.
+- `test:e2e` запускает Playwright в Chromium с viewport `960x544`.
+- `quality` выполняет lint, typecheck, tests и `build:all`.
 
-Общая логика подключается как локальный workspace-пакет. CI больше не читает отдельный private GitHub repo для `@treed/printer-logic`.
+## Runtime Modes
 
-Целевой runtime-контур описан отдельно: `docs/ui-runtime-delivery/README.md`.
+- `mock` - локальный runtime без Moonraker, выбирается Vite alias `#runtime -> mocks/runtime.ts`.
+- `live` - Moonraker/Tauri runtime, выбирается Vite alias `#runtime -> src/runtime/live.ts`.
 
-## UI release для printer loader
+Переменная:
 
-Release workflow находится в `.github/workflows/release-ui.yml`.
+```powershell
+VITE_MOONRAKER_URL=http://127.0.0.1:7125
+```
 
-Поведение:
+Примеры значений: `.env.example`, `.env.mock`, `.env.live`.
 
-- запускается при `push` в ветку `main`;
-- также может быть запущен вручную через `workflow_dispatch`;
-- выполняет `npm ci`;
-- собирает printer UI командой `npm run build:ui:printer`;
-- команда `build:ui:printer` сначала собирает `packages/printer-logic`, затем выполняет `tsc -b && vite build --mode live`;
-- добавляет manifest `dist/treed-shell-ui-manifest.json` с commit/run metadata и версией `@treed/printer-logic`;
-- пакует содержимое `dist/**` в `treed-shell-ui.zip`;
-- создает GitHub Release с тегом `ui-main-<run_number>-<run_attempt>`;
-- прикладывает к release asset `treed-shell-ui.zip`.
+Для live-проверки через SSH tunnel:
 
-Этот release предназначен для внешнего loader на принтере: loader скачивает готовый `treed-shell-ui.zip` из GitHub Release и раскладывает UI в runtime-место. Workflow не устанавливает репозиторий на принтер и не собирает Tauri bundle.
-
-## Web UI release
-
-Workflow `.github/workflows/release-web-ui.yml` запускается только вручную через `workflow_dispatch`. Он собирает `apps/web-ui` командой `npm run build:web-ui`, добавляет manifest `apps/web-ui/dist/treed-web-ui-manifest.json` и выпускает `treed-web-ui.zip` в GitHub Release.
-
-`treed-web-ui.zip` не используется printer loader. Это playground будущей вебморды.
-
-## Logic package build
-
-Workflow `.github/workflows/build-logic.yml` проверяет и собирает `packages/printer-logic`, затем публикует `treed-printer-logic-package` как GitHub Actions artifact. Loader этот package отдельно не ставит: UI-бандлы уже содержат нужную логику после сборки.
-
-## Режимы данных
-
-- `mock` — локальные данные без Moonraker, включается отдельным Vite mode: `vite --mode mock`.
-- `live` — подключение к Moonraker, используется по умолчанию для build и printer runtime.
-
-Переменные окружения:
-
-- `VITE_MOONRAKER_URL=http://127.0.0.1:7125`
-
-Пример значений — в `.env.example`. Mock-runtime живет в `mocks/runtime.ts` и не импортируется live-сборкой.
-
-## Live-режим через SSH tunnel
-
-```bash
+```powershell
 ssh -N -L 7125:127.0.0.1:7125 pi@192.168.0.21
 ```
 
-## Контракт экрана
+## Printer UI Release
 
-- Целевое разрешение интерфейса: `960x544`.
-- Источник истины по состоянию принтера: Moonraker.
+Workflow: `.github/workflows/release-ui.yml`.
 
+Триггеры:
 
-Порядок действий такой:
+- `push` в `main`;
+- ручной `workflow_dispatch`.
 
-1. В `treed-shell` довести UI до нужного состояния.
-2. Запустить/проверить `npm run build` при необходимости.
-3. Закоммитить и смержить/запушить в `main`.
-4. GitHub Actions в `treed-shell` сам соберет `treed-shell-ui.zip`.
-5. Убедиться, что в GitHub Release появился asset `treed-shell-ui.zip`.
-6. В `treed-mainshellOS` закоммитить новый loader-контур.
-7. На принтере запустить/обновить loader.
-8. Loader скачает актуальный `treed-shell-ui.zip`, распакует и перезапустит `treed-shell.service`.
+Что делает workflow:
 
-Как теперь работает система:
+1. Устанавливает зависимости через `npm ci`.
+2. Запускает `npm run quality`.
+3. Устанавливает Chromium для Playwright.
+4. Запускает `npm run test:e2e`.
+5. Собирает printer UI через `npm run build:ui:printer`.
+6. Добавляет `dist/treed-shell-ui-manifest.json`.
+7. Пакует содержимое `dist/**` в `treed-shell-ui.zip`.
+8. Создает GitHub Release с тегом `ui-main-<run_number>-<run_attempt>`.
 
-`treed-shell` больше не должен собираться на принтере. Это репозиторий, где живет UI. Он собирает готовый static bundle.
+`treed-shell-ui.zip` - единственный production artifact для printer loader. Workflow не устанавливает UI на принтер, не собирает Tauri bundle для устройства и не публикует mock-сборку.
 
-`packages/printer-logic` просто встраивается в UI при сборке. Отдельно на принтер он не ставится.
+## Web UI Release
 
-`apps/web-ui` сейчас не участвует в принтере. Это ручной playground, его можно игнорировать.
+Workflow: `.github/workflows/release-web-ui.yml`.
 
-`treed-mainshellOS` отвечает за устройство: loader, systemd, fallback, Moonraker, Klipper, экранный runtime.
+- Запускается только вручную через `workflow_dispatch`.
+- Собирает `apps/web-ui` командой `npm run build:web-ui`.
+- Добавляет `apps/web-ui/dist/treed-web-ui-manifest.json`.
+- Публикует `treed-web-ui.zip`.
 
-На принтере `treed-shell-install.sh` делает так:
+`treed-web-ui.zip` не используется printer loader.
+
+## Logic Package Build
+
+Workflow: `.github/workflows/build-logic.yml`.
+
+- Проверяет `@treed/printer-logic`.
+- Собирает workspace-пакет.
+- Публикует `treed-printer-logic-package` как GitHub Actions artifact.
+
+Отдельно на принтер этот package не ставится: UI bundle уже содержит нужную логику после сборки.
+
+## Runtime Delivery
+
+Production delivery описан в `docs/ui-runtime-delivery/README.md`.
+
+Коротко:
 
 ```text
 GitHub Release
   -> treed-shell-ui.zip
-  -> распаковка в runtime dir
-  -> локальный python http.server на 127.0.0.1:8787
-  -> Chromium в kiosk mode
-  -> treed-shell.service
-```
-
-Сам UI внутри браузера обращается к Moonraker:
-
-```text
-TreeD Shell UI
+  -> treed-mainshellOS loader
+  -> managed runtime dir
+  -> local browser/kiosk service
+  -> TreeD Shell UI
   -> Moonraker 127.0.0.1:7125
   -> Klipper / macros / host components
-  -> принтер
 ```
 
-Переключение UI остается простым:
+На принтере не должно быть `npm ci`, Rust toolchain или Tauri-сборки для UI. Устройство ставит готовый static bundle и сохраняет fallback на KlipperScreen.
 
-```bash
+Provider switch находится на стороне `treed-mainshellOS`:
+
+```text
 sudo treed-ui ts
 sudo treed-ui ks
 treed-ui status
 ```
-
-`ts` включает TreeD Shell.  
-`ks` возвращает KlipperScreen как fallback.
-
-Главная мысль: теперь на принтере не должно быть `npm ci`, Rust и Tauri-сборки для UI. Принтер только ставит готовый артефакт.

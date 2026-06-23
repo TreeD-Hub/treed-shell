@@ -1,48 +1,52 @@
-# treed-web-ui
+# `treed-web-ui`
 
-Заглушка будущей вебморды TREED. На первом этапе это integration playground для общего пакета `@treed/printer-logic`.
+Ручной Vite/React playground будущей вебморды TreeD.
 
 ## Назначение
 
-- Проверять, как веб-интерфейс потребляет общие printer capabilities.
+- Проверять потребление `@treed/printer-logic` вне Tauri shell.
+- Смотреть, как capabilities и block reasons ведут себя на разных mock snapshot.
 - Не дублировать rules из `treed-shell`.
-- Подготовить отдельный контур UI без Tauri и без 5-дюймовых shell-ограничений.
+- Держать отдельный web-контур до появления production web-задачи.
 
 ## Текущий статус
 
-Это не production UI. Экран использует mock `PrinterSnapshot`, локальные переключатели состояния и выводит результат `getPrinterCapabilities`.
+Это не production UI и не printer loader artifact. Экран использует локальные mock `PrinterSnapshot`, переключатели состояния, pending command и scenario locks, затем выводит результат `getPrinterCapabilities`.
 
 ## Зависимость на общую логику
-
-В monorepo зависимость идет на локальный workspace-пакет:
 
 ```json
 "@treed/printer-logic": "file:../../packages/printer-logic"
 ```
 
-Сборку из корня запускает `npm run build:web-ui`.
-
-## Риски и ограничения
-
-### Нельзя начинать полноценную вебморду до стабилизации общей логики
-
-Пока репозиторий является заглушкой и integration playground. Production flow, live-команды и полноценная навигация добавляются отдельными задачами.
-
-### Нельзя копировать rules из `treed-shell`
-
-Все правила доступности действий должны приходить из `@treed/printer-logic`. Если правило отличается, менять нужно общий пакет и его тесты.
-
-### Нельзя смешивать shell-специфику
-
-Не переносить Tauri, 5-дюймовый canvas `960x544`, touch-only layout и компоненты `treed-shell` как обязательную основу вебморды.
-
-### Нельзя подключать live-команды без политики
-
-Реальные команды подключать только после capabilities, явного error-flow и решения по Moonraker transport для web.
-
-## Проверки
+Из корня репозитория:
 
 ```powershell
+npm run dev:web-ui
+npm run typecheck:web-ui
+npm run build:web-ui
+```
+
+Из каталога `apps/web-ui`:
+
+```powershell
+npm run dev
 npm run typecheck
 npm run build
+npm run preview
 ```
+
+## Release
+
+Workflow `.github/workflows/release-web-ui.yml` запускается только вручную через `workflow_dispatch`.
+
+Он собирает `apps/web-ui`, добавляет `apps/web-ui/dist/treed-web-ui-manifest.json` и публикует `treed-web-ui.zip`.
+
+`treed-web-ui.zip` не используется printer loader.
+
+## Ограничения
+
+- Не подключать live-команды без отдельной политики transport/error/confirmation.
+- Не копировать rules/capabilities из `src/**`.
+- Не переносить Tauri, 5-дюймовый canvas `960x544` и shell-only touch layout как обязательную основу web UI.
+- Полноценная вебморда добавляется отдельной задачей после стабилизации общей доменной логики.

@@ -1,13 +1,23 @@
 # `src/dashboard`
 
-Слой конфигурации и вычислений главного экрана.
+Слой главного экрана TreeD Shell.
 
-Состав:
-- `config.ts` — статические данные экрана и реестр UI-ассетов для top bar / nav / базовых значений;
-- `config.ts` также хранит декларативные схемы метрик (`TEMPERATURE_METRIC_DEFINITIONS`, `QUICK_METRIC_DEFINITIONS`, `PROCESS_METRIC_DEFINITIONS`);
-- `helpers.ts` — форматирование, нормализация процентов и логика preview-режимов.
+## Состав
 
-Инварианты:
-- новые константы экрана добавляются сюда, а не в `App.tsx`;
-- хардкод для повторяемых элементов (кнопки, навигация, базовые значения) хранится в `config.ts`;
-- логика предпросмотра (`1x1` / `physical`) централизована в `helpers.ts`.
+- `config.ts` - `ScreenId`, bottom navigation, UI asset registry для dashboard и декларативные схемы метрик.
+- `DashboardContainer.tsx` - composition dashboard screen.
+- `DashboardPage.tsx` - page view главного экрана.
+- `DashboardIdleView.tsx` - idle-состояние.
+- `DashboardPrintView.tsx` - состояние активной печати.
+- `DashboardStatusDock.tsx` - status/connection dock.
+- `DashboardTemperatureWidgets.tsx` - temperature widgets.
+- `helpers.ts` - форматирование, проценты и preview helpers.
+- `printerStatusState.ts`, `printerTemperatureState.ts` - производные состояния для отображения.
+- `useDashboardIdleController.ts`, `usePrinterDisplayStatus.ts` - controller hooks.
+
+## Инварианты
+
+- Новые dashboard constants и схемы повторяемых метрик добавляются в `config.ts`, а не в `App.tsx`.
+- Визуальная логика idle/print режима остается в dashboard-компонентах.
+- Domain rules и command blocking берутся через controller props и `@treed/printer-logic`, а не вычисляются локально в view.
+- Bottom navigation пока живет в dashboard config, потому что `ScreenId` используется shell composition без `react-router`.

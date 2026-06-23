@@ -1,17 +1,24 @@
 # `src/ui`
 
-Библиотека UI-ассетов для ускоренной сборки новых страниц.
+Переиспользуемые UI primitives и widgets для shell-экранов.
 
-Состав:
-- `iconAssets.ts` — единый реестр SVG-иконок;
-- `IconMask.tsx` — базовый рендер иконки через mask/currentColor;
-- `buttons.tsx` — типовые кнопки (`StatusIconButton`, `ActionSquareButton`, `NavItemButton`);
-- `controlWidgets.tsx` — primitives для экранов управления (`SegmentedToggle`, `AxisCrossControls`, `VirtualJoystick`);
-- `metrics.tsx` — типовые виджеты метрик (`TemperatureMetric`, `PlainMetric`);
-- `printFileCard.tsx` — типовая карточка файла печати для библиотечных и файловых экранов;
-- `PrintPreviewIcon.tsx` — фирменная иконка превью модели.
+## Состав
 
-Правила:
-- новые иконки добавляются только через `iconAssets.ts`;
-- для повторяемых кнопок/виджетов сначала добавляется primitive в этот слой, затем используется на страницах;
-- правки размеров/поведения типовых кнопок и метрик делаются в одном месте (`src/ui` + shared CSS), чтобы изменения каскадно применялись по проекту.
+- `iconAssets.ts` - единый реестр SVG-иконок и `UiIconName`.
+- `IconMask.tsx` - базовый рендер иконки через CSS mask/currentColor.
+- `buttons.tsx` - `StatusIconButton`, `ActionSquareButton`, `NavItemButton`.
+- `controlWidgets.tsx` - `SegmentedToggle`, sliders, joystick и axis controls.
+- `metrics.tsx` - `TemperatureMetric`, `PlainMetric`.
+- `printFileCard.tsx` - карточка G-code файла.
+- `PrintPreviewIcon.tsx` - фирменная иконка превью модели.
+- `printTuneWidgets.tsx` - controls для runtime-tune modal.
+- `settingsWidgets.tsx` - settings cards/select/toggle/sidebar/virtual keyboard.
+- `classNames.ts` - минимальный helper сборки CSS-классов.
+- `index.ts` - публичные экспорты UI слоя.
+
+## Правила
+
+- Новые иконки добавляются через `src/assets/icons/**` и регистрируются в `iconAssets.ts`.
+- Повторяемые кнопки, поля, метрики и keyboard/tune widgets добавляются сюда до использования в screen-слое.
+- UI primitives не должны знать про Moonraker, transport, command execution или printer domain rules.
+- Размеры touch-target и shared visual behavior правятся здесь и в `src/styles/**`, чтобы изменения каскадно применялись по shell.
