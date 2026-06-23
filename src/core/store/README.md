@@ -1,12 +1,16 @@
-﻿# `src/core/store`
+# `src/core/store`
 
-Слой хранения и обновления состояния интерфейса.
+Слой хранения и обновления printer snapshot для UI.
 
-Сейчас:
-- `printerStore.ts` — внешний store полного снимка принтера и selector-подписки через `useSyncExternalStore`;
-- `usePrinterSnapshot.ts` — transport lifecycle, polling/WebSocket и compatibility-доступ к полному снимку для еще не перенесенных экранов.
+## Состав
 
-Контракт:
-- источник данных выбирается через Vite alias `#runtime`: `--mode mock` подключает `mocks/runtime.ts`, остальные режимы подключают live adapter;
-- при сбоях connection переводится в `reconnecting/offline`;
-- новые UI-блоки должны читать частые данные через selector-хуки, а не подписываться на весь `PrinterSnapshot`.
+- `printerStore.ts` - внешний store полного `PrinterSnapshot`, fallback snapshot, selector-подписки через `useSyncExternalStore` и reconcile stale revisions.
+- `usePrinterSnapshot.ts` - lifecycle transport client: first refresh, WebSocket subscription, HTTP fallback polling, error transitions и delete file wrapper.
+
+## Контракт
+
+- `mock`/`live` runtime выбирается через Vite alias `#runtime`.
+- Если live WebSocket доступен, частые обновления приходят через subscription.
+- HTTP fallback остается включенным: `2s` polling для clients без subscription и `30s` fallback при WebSocket.
+- При ошибках connection переводится в `reconnecting` или `offline`, а `shutdown` сохраняется как отдельное состояние.
+- Новые UI-блоки должны читать частые данные через selector-хуки, а не подписываться на весь `PrinterSnapshot`, если им нужен небольшой срез.

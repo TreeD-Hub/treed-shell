@@ -1,10 +1,19 @@
 # `mocks`
 
-Локальные mock-сценарии данных для режима `vite --mode mock`.
+Mock runtime для режима `vite --mode mock`.
 
-Назначение:
-- быстрая UI-разработка без зависимости от Moonraker/PI;
-- воспроизводимые сценарии состояния принтера.
+## Назначение
 
-Runtime adapter:
-- `runtime.ts` — mock transport + mock command client. Live-сборка его не импортирует.
+- Быстрая UI-разработка без Moonraker и принтера.
+- Воспроизводимые printer snapshots, command results и host-network states.
+- Unit/integration tests, которым нужен управляемый runtime.
+
+## Состав
+
+- `runtime.ts` - mock `createTransportClient`, `createCommandClient`, `createHostNetworkClient`, helpers для принудительных command/network/transport состояний.
+
+## Контракт
+
+- Live-сборка не импортирует `mocks/runtime.ts`.
+- Подключение идет через Vite alias `#runtime` в `vite.config.ts`.
+- Mock command operations доступны тестам через helper-функции и не должны смешиваться с production command client.

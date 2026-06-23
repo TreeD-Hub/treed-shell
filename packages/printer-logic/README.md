@@ -1,4 +1,4 @@
-# treed-printer-logic
+# `@treed/printer-logic`
 
 Общий TypeScript-пакет доменной логики принтера для `treed-shell` и будущей вебморды.
 
@@ -6,37 +6,54 @@
 
 Пакет хранит только стабильную общую логику:
 
-- типы состояния принтера и команд;
-- типы и pure helpers для идентичности файлов печати;
-- типы и pure helpers для Wi-Fi / host-network контракта;
-- нормализацию простых полей состояния;
-- расчет capabilities — какие действия сейчас доступны и почему действие заблокировано.
-- каталог TreeD-команд, risk/capability metadata и причины блокировки команд.
+- типы printer snapshot, connection state, limits, files и host-network;
+- pure helpers для файлов печати: normalize id/path/name/directory и sort;
+- pure helpers для Wi-Fi/host-network статусов и выбора сети;
+- нормализацию homed axes;
+- расчет capabilities для групп действий;
+- каталог TreeD-команд с risk/capability metadata;
+- причины блокировки команд через `getTreeDCommandBlockReason`;
+- базовую валидацию аргументов команд через `getTreeDCommandArgumentError`;
+- лимиты профиля `TREED_V2_COREXY_V1_LIMITS`.
 
-Пакет не выполняет команды, не вызывает `nmcli` и не ходит в Moonraker. UI-приложения сами отвечают за transport, errors, retry и отображение.
+Пакет не выполняет команды, не вызывает `nmcli`, не ходит в Moonraker и не знает про layout. UI-приложения отвечают за transport, errors, retry, confirmation flow и отображение.
 
-## Риски и ограничения
+## Публичный контракт
 
-### Domain rules нельзя смешивать с UI
+- Runtime types экспортируются из `src/index.ts`.
+- Сборочный entrypoint: `dist/index.js`.
+- Type declarations: `dist/index.d.ts`.
+- Package export: `"."`.
+- Публикуемые файлы: `dist`, `README.md`.
 
-В этом пакете запрещены React-компоненты, CSS, Tauri API и layout-логика. UI должен только читать результат `getPrinterCapabilities`.
+## Инварианты
 
-### Moonraker transport нельзя выносить слишком рано
-
-Live transport остается в UI-приложениях до стабилизации контракта Moonraker. Этот пакет принимает уже нормализованный `PrinterSnapshot`.
-
-### Shell и Web не должны расходиться в блокировках
-
-Блокировки крупных UI-групп должны идти через `getPrinterCapabilities`, а блокировки конкретных команд — через `getTreeDCommandBlockReason`. Если правило нужно изменить, оно меняется здесь и покрывается unit-тестами.
-
-### Silent-fail недопустим
-
-Пакет только говорит, можно ли показывать действие доступным. Выполнение команд, ошибки транспорта и retry остаются явными обязанностями приложений.
+- Domain rules нельзя смешивать с UI: никаких React-компонентов, CSS, Tauri API и layout-логики.
+- Shell и Web не должны расходиться в правилах доступности действий.
+- Блокировки крупных UI-групп идут через `getPrinterCapabilities`.
+- Блокировки конкретных команд идут через `getTreeDCommandBlockReason`.
+- Если правило меняется, оно меняется здесь и покрывается тестом в `packages/printer-logic/test/**`.
 
 ## Проверки
+
+Из каталога пакета:
 
 ```powershell
 npm run typecheck
 npm test
 npm run build
 ```
+
+Из корня репозитория:
+
+```powershell
+npm run typecheck:logic
+npm run test:logic
+npm run build:logic
+```
+
+## Смежные слои
+
+- Shell-side command transport: `../../src/core/commands/README.md`.
+- Shell-side state/transport: `../../src/core/README.md`.
+- Web playground: `../../apps/web-ui/README.md`.
