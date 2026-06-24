@@ -70,55 +70,62 @@ function TestHarness({
 }
 
 describe('useHeatingFanController', () => {
-  it('uses only real snapshot temperatures for chart history', async () => {
+  it('keeps timestamped current and target values from real snapshots for five minutes', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-24T12:00:00Z'))
     const executeCommand = vi.fn<TestHarnessProps['executeCommand']>()
       .mockResolvedValue(true)
     const { rerender } = render(<TestHarness executeCommand={executeCommand} />)
 
-    expect(JSON.parse(screen.getByTestId('chart-series').textContent ?? '[]')).toEqual([
-      {
-        id: 'nozzle',
-        label: 'Сопло',
-        tone: 'orange',
-        values: [201],
-        target: 215,
-      },
-      {
-        id: 'bed',
-        label: 'Стол',
-        tone: 'green',
-        values: [58],
-        target: 60,
-      },
-    ])
+    try {
+      expect(JSON.parse(screen.getByTestId('chart-series').textContent ?? '[]')).toEqual([
+        {
+          id: 'nozzle',
+          label: 'Сопло',
+          tone: 'orange',
+          points: [{ timestamp: Date.parse('2026-06-24T12:00:00Z'), current: 201, target: 215 }],
+        },
+        {
+          id: 'bed',
+          label: 'Стол',
+          tone: 'green',
+          points: [{ timestamp: Date.parse('2026-06-24T12:00:00Z'), current: 58, target: 60 }],
+        },
+      ])
 
-    rerender(
-      <TestHarness
-        executeCommand={executeCommand}
-        snapshot={{
-          ...DEFAULT_SNAPSHOT,
-          extruderTemp: 205,
-          bedTemp: 59,
-        }}
-      />,
-    )
+      vi.setSystemTime(new Date('2026-06-24T12:01:00Z'))
+      rerender(
+        <TestHarness
+          executeCommand={executeCommand}
+          snapshot={{
+            ...DEFAULT_SNAPSHOT,
+            thermalTargets: { nozzle: 230, bed: 60 },
+          }}
+        />,
+      )
 
-    expect(JSON.parse(screen.getByTestId('chart-series').textContent ?? '[]')).toEqual([
-      {
-        id: 'nozzle',
-        label: 'Сопло',
-        tone: 'orange',
-        values: [201, 205],
-        target: 215,
-      },
-      {
-        id: 'bed',
-        label: 'Стол',
-        tone: 'green',
-        values: [58, 59],
-        target: 60,
-      },
-    ])
+      expect(JSON.parse(screen.getByTestId('chart-series').textContent ?? '[]')[0].points).toEqual([
+        { timestamp: Date.parse('2026-06-24T12:00:00Z'), current: 201, target: 215 },
+        { timestamp: Date.parse('2026-06-24T12:01:00Z'), current: 201, target: 230 },
+      ])
+
+      vi.setSystemTime(new Date('2026-06-24T12:06:01Z'))
+      rerender(
+        <TestHarness
+          executeCommand={executeCommand}
+          snapshot={{
+            ...DEFAULT_SNAPSHOT,
+            extruderTemp: 202,
+          }}
+        />,
+      )
+
+      expect(JSON.parse(screen.getByTestId('chart-series').textContent ?? '[]')[0].points).toEqual([
+        { timestamp: Date.parse('2026-06-24T12:06:01Z'), current: 202, target: 215 },
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('submits normalized temperature target without showing it before snapshot updates', async () => {
