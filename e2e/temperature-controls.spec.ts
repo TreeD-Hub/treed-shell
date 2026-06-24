@@ -35,8 +35,6 @@ test('temperature controls fit the 960x544 touch contract', async ({ page }, tes
   const shell = page.getByTestId('screen-shell')
   const heatingGrid = page.locator('.control-heating-grid')
   const chart = page.getByTestId('control-heating-chart')
-  const chartSvg = chart.locator('.print-temp-chart-svg')
-  const stepper = page.locator('.control-heating-row .print-tune-compact-stepper').first()
   const nozzleMinus = page.getByTestId('control-heating-nozzle-minus')
   const nozzlePlus = page.getByTestId('control-heating-nozzle-plus')
 

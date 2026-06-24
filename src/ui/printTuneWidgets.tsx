@@ -339,7 +339,7 @@ export function TemperatureTrendChart({ series, testId }: TemperatureTrendChartP
   const maxValue = yTicks[yTicks.length - 1] ?? 100
   const plotWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right
   const plotHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
-  const minTime = allPoints.length > 0 ? Math.min(...allPoints.map((point) => point.timestamp)) : Date.now()
+  const minTime = allPoints.length > 0 ? Math.min(...allPoints.map((point) => point.timestamp)) : 0
   const maxTime = allPoints.length > 0 ? Math.max(...allPoints.map((point) => point.timestamp)) : minTime
   const timeTicks = buildTimeTickLabels(minTime, maxTime)
 

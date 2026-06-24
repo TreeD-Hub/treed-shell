@@ -145,7 +145,7 @@ export function useHeatingFanController({
         })),
       },
     ],
-    [printBedTargetTemp, printNozzleTargetTemp, temperatureHistory],
+    [temperatureHistory],
   )
 
   const heatingControlRows: HeatingControlRow[] = [
