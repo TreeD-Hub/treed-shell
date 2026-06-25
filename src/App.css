@@ -2598,7 +2598,7 @@ body {
 .control-heating-row {
   min-height: 70px;
   display: grid;
-  grid-template-columns: minmax(92px, 1fr) 76px minmax(244px, 252px);
+  grid-template-columns: minmax(92px, 1fr) 76px 226px;
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
@@ -2666,16 +2666,10 @@ body {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  gap: 6px;
-}
-
-.control-heating-row .print-tune-compact-stepper-main {
-  grid-template-columns: minmax(72px, 1fr) minmax(32px, auto);
-  gap: 6px;
 }
 
 .control-heating-row .print-tune-compact-stepper-btn {
-  width: 50px;
+  width: 54px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--color-surface-elevated) 82%, var(--color-block-surface));
   color: var(--color-text-primary);
@@ -2690,12 +2684,12 @@ body {
 }
 
 .control-heating-row .print-tune-compact-stepper-controls {
-  grid-template-columns: repeat(2, 50px);
+  grid-template-columns: repeat(2, 54px);
   gap: 6px;
 }
 
-.control-heating-row .print-tune-compact-stepper-input-wrap {
-  min-width: 72px;
+.control-heating-row .print-tune-compact-stepper-input-wrap,
+.print-temp-table-row .print-tune-compact-stepper-input-wrap {
   padding: 0 8px;
 }
 
@@ -2705,7 +2699,7 @@ body {
 }
 
 .control-heating-row .print-tune-compact-stepper-unit {
-  min-width: 32px;
+  min-width: 36px;
   font-size: var(--font-size-body);
 }
 
@@ -4555,7 +4549,7 @@ body {
 .print-temp-table-head,
 .print-temp-table-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 82px minmax(244px, 252px);
+  grid-template-columns: minmax(0, 1fr) 82px 232px;
   align-items: center;
   column-gap: 10px;
   padding: 0 12px;
@@ -7712,7 +7706,7 @@ select {
   }
 
   .control-heating-row {
-    grid-template-columns: minmax(0, 1fr) 64px minmax(236px, 248px);
+    grid-template-columns: minmax(0, 1fr) 64px minmax(188px, 216px);
   }
 
   .control-maintenance-header,
