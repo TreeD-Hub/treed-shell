@@ -14,7 +14,7 @@
 
 - Меню: `menu-dashboard.svg`, `menu-control.svg`, `menu-files.svg`, `menu-macros.svg`, `menu-settings.svg`.
 - Settings/menu groups: `menu-device.svg`, `menu-interface.svg`, `menu-language.svg`, `menu-updates.svg`.
-- Действия: `action-start.svg`, `action-pause.svg`, `action-resume.svg`, `action-stop-critical.svg`.
+- Действия: `action-start.svg`, `action-pause.svg`, `action-resume.svg`, `action-stop-critical.svg`, `action-delete.svg`.
 - Статус: `status-wifi.svg`, `status-cloud.svg`, `status-power.svg`, `status-notification.svg`.
 - Метрики: `metric-nozzle.svg`, `metric-bed.svg`, `metric-fan.svg`, `metric-light.svg`, `metric-speed.svg`, `metric-flow.svg`.
 - Утилиты: `utility-home.svg`, `utility-back.svg`, `utility-chevron.svg`, `utility-snowflake.svg`.

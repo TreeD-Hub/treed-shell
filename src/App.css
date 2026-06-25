@@ -5084,7 +5084,7 @@ body {
 }
 
 .file-modal-dialog {
-  width: min(420px, 100%);
+  width: min(760px, 100%);
   max-height: calc(100% - (var(--space-sm) * 2));
   border-radius: 14px;
   border: 1px solid var(--color-border-default);
@@ -5092,7 +5092,8 @@ body {
   box-shadow: 0 22px 44px var(--color-shadow-strong);
   padding: var(--space-md);
   display: grid;
-  gap: var(--space-sm);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-md);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-default) transparent;
@@ -5138,8 +5139,18 @@ body {
   cursor: pointer;
 }
 
+.file-modal-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
 .file-modal-preview {
-  height: 140px;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 0;
   border-radius: 12px;
   border: 1px solid var(--color-border-default);
   background:
@@ -5148,11 +5159,32 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.file-modal-preview.has-image {
+  background:
+    radial-gradient(circle at 1px 1px, var(--terminal-grid-dot) 0 1px, transparent 1.1px) 0 0 / 14px 14px,
+    var(--color-surface-track);
+}
+
+.file-modal-preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
 }
 
 .file-modal-preview svg {
   width: 88px;
   height: 88px;
+}
+
+.file-modal-details {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
 }
 
 .file-modal-name {
@@ -5213,8 +5245,9 @@ body {
 
 .file-modal-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 56px minmax(0, 1fr);
   gap: var(--space-xs);
+  margin-top: auto;
 }
 
 .file-modal-action {
@@ -5226,6 +5259,9 @@ body {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .file-modal-action:disabled {
@@ -5233,9 +5269,39 @@ body {
   cursor: not-allowed;
 }
 
+.file-modal-action-start {
+  border-color: var(--color-primary);
+  background: var(--color-primary-surface);
+  color: var(--color-primary-light);
+  box-shadow: none;
+}
+
+.file-modal-action-delete {
+  width: 56px;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--color-border-default) 82%, transparent);
+  background: color-mix(in srgb, var(--color-surface-elevated) 82%, var(--color-text-soft));
+  color: var(--color-text-primary);
+}
+
 .file-modal-action-danger {
   border: 1px solid var(--color-error);
   color: var(--color-error);
+}
+
+@media (max-width: 760px) {
+  .file-modal-dialog {
+    width: min(420px, 100%);
+  }
+
+  .file-modal-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .file-modal-preview {
+    width: min(260px, 100%);
+    justify-self: center;
+  }
 }
 
 .job-card {
@@ -5304,7 +5370,7 @@ body {
   cursor: pointer;
   transition:
     background-color 0.18s ease,
-    transform 0.18s ease;
+    color 0.18s ease;
 }
 
 .print-tune-hitbox:focus-visible {
@@ -5312,7 +5378,7 @@ body {
 }
 
 .print-tune-hitbox:active {
-  transform: translateY(1px);
+  background: rgba(244, 244, 240, 0.035);
 }
 
 .print-tune-hitbox-progress {
@@ -5522,7 +5588,11 @@ body {
   line-height: 1.05;
   color: var(--color-text-primary);
   cursor: pointer;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .action-icon {
@@ -5530,7 +5600,8 @@ body {
 }
 
 .stack-action:active {
-  transform: translateY(1px);
+  border-color: rgba(244, 244, 240, 0.34);
+  background: rgba(244, 244, 240, 0.045);
 }
 
 .stack-action:disabled {
@@ -5690,7 +5761,8 @@ body {
 }
 
 .babystep-btn:active {
-  transform: translateY(1px);
+  border-color: rgba(244, 244, 240, 0.34);
+  background: rgba(244, 244, 240, 0.045);
 }
 
 .bottom-nav {
@@ -5740,7 +5812,8 @@ body {
   z-index: 1;
   transition:
     color 0.22s ease,
-    transform 0.22s ease;
+    background-color 0.22s ease,
+    border-color 0.22s ease;
 }
 
 .nav-item.is-active {
@@ -5760,7 +5833,7 @@ body {
 }
 
 .nav-item:active {
-  transform: translateY(1px);
+  background: rgba(244, 244, 240, 0.035);
 }
 
 .nav-item.is-active .nav-icon {
@@ -6126,6 +6199,19 @@ select {
   color: var(--color-primary-light);
 }
 
+.file-modal-action-start {
+  border-color: var(--color-primary);
+  background: var(--color-primary-surface);
+  color: var(--color-primary-light);
+  box-shadow: none;
+}
+
+.file-modal-action-delete {
+  border-color: color-mix(in srgb, var(--color-border-default) 82%, transparent);
+  background: color-mix(in srgb, var(--color-surface-elevated) 82%, var(--color-text-soft));
+  color: var(--color-text-primary);
+}
+
 .settings-toggle-switch,
 .bed-point {
   border-radius: 4px;
@@ -6297,6 +6383,7 @@ select {
 .stats-card,
 .process-card,
 .zoffset-card {
+  border-radius: 8px;
   border-color: rgba(244, 244, 240, 0.22);
   background:
     linear-gradient(180deg, rgba(244, 244, 240, 0.04), transparent 38%),
@@ -6310,6 +6397,7 @@ select {
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-sm);
   padding: var(--space-sm);
+  overflow: hidden;
   background:
     radial-gradient(circle at 1px 1px, var(--terminal-grid-line) 0 1px, transparent 1.1px) 0 0 / 12px 12px,
     linear-gradient(180deg, rgba(244, 244, 240, 0.035), transparent 44%),
@@ -6317,8 +6405,13 @@ select {
 }
 
 .job-card > .dashboard-status-dock {
+  gap: var(--space-micro);
   padding: 0 0 var(--space-xs);
   border-bottom-color: rgba(244, 244, 240, 0.14);
+}
+
+.job-card .dashboard-status-actions {
+  gap: var(--space-micro);
 }
 
 .preview-panel {
@@ -6375,26 +6468,27 @@ select {
 }
 
 .right-column {
-  grid-template-rows: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  gap: var(--space-sm);
+  grid-template-rows: 228px minmax(0, 1fr);
+  gap: var(--space-xs);
 }
 
 .stats-actions-row {
-  --action-square-size: 114px;
+  --action-square-size: 109px;
   grid-template-columns: minmax(0, 1fr) var(--action-square-size);
+  gap: var(--space-xs);
 }
 
 .stats-card {
-  padding: var(--space-lg);
-  gap: var(--space-lg);
+  padding: var(--space-md);
+  gap: var(--space-md);
 }
 
 .temp-grid {
-  gap: var(--space-lg);
+  gap: var(--space-md);
 }
 
 .three-up-grid {
-  gap: var(--space-lg);
+  gap: var(--space-md);
   margin-top: 0;
 }
 
@@ -6432,12 +6526,13 @@ select {
 }
 
 .process-row {
-  grid-template-columns: minmax(0, 0.92fr) minmax(292px, 1fr);
+  grid-template-columns: minmax(306px, 1fr) minmax(270px, 0.82fr);
+  gap: var(--space-xs);
 }
 
 .process-card,
 .zoffset-card {
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-md);
 }
 
 .process-card {
@@ -6446,9 +6541,24 @@ select {
 
 .process-grid {
   height: 100%;
+  grid-template-columns: minmax(104px, 0.9fr) minmax(132px, 1.1fr);
   align-content: space-between;
-  column-gap: var(--space-lg);
+  column-gap: var(--space-sm);
   row-gap: var(--space-md);
+}
+
+.process-card .label {
+  white-space: nowrap;
+}
+
+.process-value,
+.zoffset-value {
+  white-space: nowrap;
+}
+
+.process-value span,
+.zoffset-value span {
+  white-space: nowrap;
 }
 
 .zoffset-card {

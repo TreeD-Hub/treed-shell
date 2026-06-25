@@ -135,6 +135,77 @@ describe('App', () => {
     })
   }, 20000)
 
+  it('renders active print left panel from live job and file metadata', async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(getPrinterSnapshot().connection).toBe('online')
+    })
+
+    const previousSnapshot = getPrinterSnapshot()
+
+    try {
+      applyPrinterSnapshot({
+        ...previousSnapshot,
+        source: 'live',
+        updatedAt: '2026-06-25T09:15:00.000Z',
+        state: 'printing',
+        printJob: {
+          ...previousSnapshot.printJob,
+          filename: 'queue/very_long_calibration_tower_for_scroll.gcode',
+          filePath: 'queue/very_long_calibration_tower_for_scroll.gcode',
+          state: 'printing',
+          progress: 0.25,
+          progressPercent: 25,
+          currentLayer: 12,
+          totalLayer: 48,
+          isActive: true,
+          isPaused: false,
+        },
+        printFiles: [
+          {
+            id: 'file-calibration-tower',
+            path: 'queue/very_long_calibration_tower_for_scroll.gcode',
+            name: 'very_long_calibration_tower_for_scroll.gcode',
+            directory: 'queue',
+            printTime: '40 мин',
+            weight: '12 г',
+            material: 'PLA',
+            addedAt: '2026-06-25T08:00:00.000Z',
+            preview: {
+              small: {
+                src: '/server/files/gcodes/.thumbs/tower-48x48.png',
+                width: 48,
+                height: 48,
+                format: 'png',
+              },
+              large: {
+                src: '/server/files/gcodes/.thumbs/tower-300x300.png',
+                width: 300,
+                height: 300,
+                format: 'png',
+              },
+            },
+          },
+        ],
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('print-progress-summary')).toBeInTheDocument()
+      })
+
+      const previewImage = screen.getByAltText('Предпросмотр very_long_calibration_tower_for_scroll.gcode')
+      expect(previewImage).toHaveAttribute('src', '/server/files/gcodes/.thumbs/tower-300x300.png')
+      expect(screen.getByText('very_long_calibration_tower_for_scroll.gcode')).toHaveClass('is-scrollable')
+      expect(screen.getByText('25%')).toBeInTheDocument()
+      expect(screen.getByText('09:45')).toBeInTheDocument()
+      expect(screen.getByText('12 / 48')).toBeInTheDocument()
+      expect(document.querySelector('.job-meter-fill')).toHaveStyle({ width: '25%' })
+    } finally {
+      applyPrinterSnapshot(previousSnapshot)
+    }
+  })
+
   it('opens numeric keyboard for temperature input and applies value', async () => {
     render(<App />)
 
