@@ -360,6 +360,7 @@ export function useHeatingFanController({
     onChartModeChange: setTemperatureChartMode,
     onNozzleTargetChange: handleNozzleTargetChange,
     onBedTargetChange: handleBedTargetChange,
+    onPresetApply: handleHeatingPresetApply,
   }
 
   return {

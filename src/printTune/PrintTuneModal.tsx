@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import type { TemperatureKeyboardTarget } from '../control'
+import { CONTROL_HEATING_PRESET_OPTIONS } from '../control/config'
 import { rounded } from '../dashboard/helpers'
 import {
   HorizontalSteppedSlider,
@@ -46,6 +47,7 @@ type PrintTuneTemperatureProps = {
   onChartModeChange: (mode: TemperatureChartMode) => void
   onNozzleTargetChange: (value: number) => void
   onBedTargetChange: (value: number) => void
+  onPresetApply: (nozzle: number, bed: number) => void
 }
 
 type PrintTuneValuesProps = {
@@ -190,6 +192,30 @@ export function PrintTuneModal({
                       testIdPrefix={row.testIdPrefix}
                     />
                   </div>
+                )
+              })}
+            </section>
+
+            <section className="print-temp-presets" aria-label="Предустановки нагрева">
+              {CONTROL_HEATING_PRESET_OPTIONS.map((preset) => {
+                const isActive =
+                  temperature.nozzleTargetTemp === preset.nozzle &&
+                  temperature.bedTargetTemp === preset.bed
+
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`print-temp-preset-btn${isActive ? ' is-active' : ''}`}
+                    aria-pressed={isActive}
+                    data-testid={`print-tune-temp-preset-${preset.id}`}
+                    onClick={() => temperature.onPresetApply(preset.nozzle, preset.bed)}
+                  >
+                    <span className="print-temp-preset-label">{preset.label}</span>
+                    <span className="print-temp-preset-values">
+                      {preset.nozzle}° / {preset.bed}°
+                    </span>
+                  </button>
                 )
               })}
             </section>
