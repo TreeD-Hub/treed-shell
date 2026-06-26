@@ -4184,10 +4184,10 @@ body {
 
 .file-modal-layer {
   position: absolute;
-  inset: 64px 0 0;
+  inset: 0;
   z-index: 25;
   background: var(--color-overlay);
-  padding: var(--space-sm);
+  padding: calc(64px + var(--space-sm)) var(--space-sm) var(--space-sm);
   display: grid;
   place-items: center;
   animation: top-popup-layer-enter 0.2s ease-out;
@@ -4195,10 +4195,10 @@ body {
 
 .print-cancel-modal-layer {
   position: absolute;
-  inset: 64px 0 0;
+  inset: 0;
   z-index: 30;
   background: var(--color-overlay);
-  padding: var(--space-sm);
+  padding: calc(64px + var(--space-sm)) var(--space-sm) var(--space-sm);
   display: grid;
   place-items: center;
   animation: top-popup-layer-enter 0.2s ease-out;
@@ -4257,10 +4257,10 @@ body {
 
 .print-tune-modal-layer {
   position: absolute;
-  inset: 64px 0 0;
+  inset: 0;
   z-index: 29;
   background: var(--color-overlay);
-  padding: var(--space-sm);
+  padding: calc(64px + var(--space-sm)) var(--space-sm) var(--space-sm);
   display: grid;
   place-items: center;
   animation: top-popup-layer-enter 0.2s ease-out;

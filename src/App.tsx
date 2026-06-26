@@ -49,6 +49,7 @@ import './App.css'
 
 const DEFAULT_SCREEN: ScreenId = 'dashboard'
 const PRINT_CANCEL_MODAL_TITLE_ID = 'print-cancel-modal-title'
+const DEFAULT_BABYSTEP_STEP = BABYSTEP_STEP_OPTIONS[BABYSTEP_STEP_OPTIONS.length - 1]
 type KeyboardTarget = 'idleNotes' | SettingsKeyboardTarget
 const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
   connecting: 'Подключение',
@@ -62,7 +63,7 @@ const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
 function App() {
   const { snapshot, refresh, deletePrintFile } = usePrinterSnapshot()
   const screenShellRef = useRef<HTMLElement | null>(null)
-  const [babystepStep, setBabystepStep] = useState<number>(BABYSTEP_STEP_OPTIONS[1])
+  const [babystepStep, setBabystepStep] = useState<number>(DEFAULT_BABYSTEP_STEP)
   const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
   const printSessionController = usePrintSessionController({ snapshot, deletePrintFile })
   const commandRuntimeContext = useMemo(

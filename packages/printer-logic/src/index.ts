@@ -639,6 +639,9 @@ export interface TreeDCommandRuntimeContext {
 
 const MIN_FILAMENT_EXTRUDE_TEMP_C = 170
 const MAX_UI_MOVE_DISTANCE_MM = 50
+export const Z_OFFSET_BABYSTEP_STEP_OPTIONS = [0.01, 0.025, 0.05] as const
+const MIN_Z_OFFSET_BABYSTEP_DELTA_MM = Z_OFFSET_BABYSTEP_STEP_OPTIONS[0]
+const MAX_Z_OFFSET_BABYSTEP_DELTA_MM = Z_OFFSET_BABYSTEP_STEP_OPTIONS[Z_OFFSET_BABYSTEP_STEP_OPTIONS.length - 1]
 
 const COMMAND_CAPABILITY_LABELS: Record<TreeDCommandCapability, string> = {
   print: 'печать',
@@ -1127,6 +1130,17 @@ export function getTreeDCommandArgumentError(
         ?? getRangeError(args.bedCelsius, 0, limits.bedMaxC, 'Температура стола')
     case 'setFanPercent':
       return getRangeError(args.percent, 0, 100, 'Скорость вентилятора')
+    case 'adjustZOffset': {
+      const deltaMagnitude = Math.abs(args.deltaMm)
+      if (
+        !Number.isFinite(args.deltaMm) ||
+        deltaMagnitude < MIN_Z_OFFSET_BABYSTEP_DELTA_MM ||
+        deltaMagnitude > MAX_Z_OFFSET_BABYSTEP_DELTA_MM
+      ) {
+        return `Z-offset delta должен быть конечным числом в диапазоне -${MAX_Z_OFFSET_BABYSTEP_DELTA_MM}…-${MIN_Z_OFFSET_BABYSTEP_DELTA_MM} или ${MIN_Z_OFFSET_BABYSTEP_DELTA_MM}…${MAX_Z_OFFSET_BABYSTEP_DELTA_MM}.`
+      }
+      return null
+    }
     default:
       return null
   }
