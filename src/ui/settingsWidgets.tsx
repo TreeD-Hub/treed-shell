@@ -22,6 +22,7 @@ type SettingsSidebarMenuProps<T extends string> = {
   ariaLabel: string
   testIdPrefix?: string
   iconSize?: number
+  disabledReasons?: Partial<Record<T, string | null>>
 }
 
 export function SettingsSidebarMenu<T extends string>({
@@ -31,24 +32,32 @@ export function SettingsSidebarMenu<T extends string>({
   ariaLabel,
   testIdPrefix,
   iconSize = 20,
+  disabledReasons,
 }: SettingsSidebarMenuProps<T>) {
   return (
     <nav className="settings-sidebar-menu" aria-label={ariaLabel}>
-      {options.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          className={joinClassNames('settings-sidebar-item', value === option.id && 'is-active')}
-          aria-pressed={value === option.id}
-          aria-label={option.label}
-          title={option.label}
-          data-testid={testIdPrefix ? `${testIdPrefix}-${option.id}` : undefined}
-          onClick={() => onChange(option.id)}
-        >
-          <IconMask name={option.icon} size={iconSize} />
-          <span className="settings-sidebar-label">{option.label}</span>
-        </button>
-      ))}
+      {options.map((option) => {
+        const disabledReason = disabledReasons?.[option.id] ?? null
+        const isDisabled = disabledReason !== null
+
+        return (
+          <button
+            key={option.id}
+            type="button"
+            className={joinClassNames('settings-sidebar-item', value === option.id && 'is-active')}
+            aria-pressed={value === option.id}
+            aria-disabled={isDisabled}
+            aria-label={option.label}
+            title={disabledReason ?? option.label}
+            data-testid={testIdPrefix ? `${testIdPrefix}-${option.id}` : undefined}
+            disabled={isDisabled}
+            onClick={() => onChange(option.id)}
+          >
+            <IconMask name={option.icon} size={iconSize} />
+            <span className="settings-sidebar-label">{option.label}</span>
+          </button>
+        )
+      })}
     </nav>
   )
 }

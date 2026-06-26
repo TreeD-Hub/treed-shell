@@ -175,6 +175,11 @@ function App() {
     createCommandHandlers: createPrintSessionCommandHandlers,
   } = printSessionController
   const isBusy = pendingCommand !== null
+  const movementTabBlockReason = hasActivePrint
+    ? getCommandBlockReason('moveAxis', { command: 'moveAxis', axis: 'X', distanceMm: 1 })
+    : null
+  const activeControlGroupForRender =
+    activeControlGroup === 'movement' && movementTabBlockReason !== null ? 'heating' : activeControlGroup
   const {
     activeGroup: activePrintTuneGroup,
     openGroup: openPrintTuneGroup,
@@ -340,6 +345,14 @@ function App() {
 
   function handleControlMenuCompactToggle(): void {
     setIsControlMenuCompact((currentState) => !currentState)
+  }
+
+  function handleControlGroupChange(nextGroup: ControlGroupId): void {
+    if (nextGroup === 'movement' && movementTabBlockReason !== null) {
+      return
+    }
+
+    setActiveControlGroup(nextGroup)
   }
 
   function handleVirtualKeyboardKeyMouseDown(event: MouseEvent<HTMLButtonElement>): void {
@@ -623,6 +636,7 @@ function App() {
         <AppScreenContent
           activeScreen={activeScreen}
           isFilesScreenActive={isFilesScreenActive}
+          hasActivePrint={hasActivePrint}
           onScreenSelect={handleScreenSelect}
           dashboard={dashboardProps}
           files={{
@@ -631,15 +645,18 @@ function App() {
             onFileSelect: handlePrintFileSelect,
           }}
           control={{
-            activeControlGroup,
+            activeControlGroup: activeControlGroupForRender,
             isControlMenuCompact,
+            controlGroupBlockReasons: {
+              movement: movementTabBlockReason,
+            },
             pendingCommand,
             isBusy,
             activeControlFlashKey,
             movementMode,
             moveStepKey,
             getCommandBlockReason,
-            onControlGroupChange: setActiveControlGroup,
+            onControlGroupChange: handleControlGroupChange,
             onControlMenuCompactToggle: handleControlMenuCompactToggle,
             onParkingTargetSelect: handleParkingTargetSelect,
             onServiceModeToggle: handleServiceModeToggle,

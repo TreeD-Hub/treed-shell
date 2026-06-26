@@ -203,6 +203,78 @@ export function createUnavailableHostNetworkStatus(message: string): HostNetwork
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function normalizeWifiNetworkSecurity(value: unknown): WifiNetworkSecurity {
+  if (value === 'open' || value === 'wpa2' || value === 'wpa3') {
+    return value
+  }
+
+  return 'wpa2'
+}
+
+function normalizeSignalPercent(value: unknown): number {
+  const percent = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(percent)) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(100, Math.round(percent)))
+}
+
+function normalizeWifiNetworkItem(value: unknown): WifiNetworkItem | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const ssid = nonEmptyString(value.ssid)
+  if (ssid === null) {
+    return null
+  }
+
+  return {
+    id: nonEmptyString(value.id) ?? ssid,
+    ssid,
+    signalPercent: normalizeSignalPercent(value.signalPercent),
+    security: normalizeWifiNetworkSecurity(value.security),
+    saved: value.saved === true,
+    connected: value.connected === true,
+  }
+}
+
+export function normalizeHostNetworkStatus(value: unknown, fallbackMessage: string): HostNetworkStatus {
+  if (!isRecord(value) || typeof value.available !== 'boolean') {
+    return createUnavailableHostNetworkStatus(fallbackMessage)
+  }
+
+  const message = nonEmptyString(value.message) ?? fallbackMessage
+
+  if (!value.available) {
+    return createUnavailableHostNetworkStatus(message)
+  }
+
+  const networks = Array.isArray(value.networks)
+    ? value.networks.flatMap((network) => {
+        const normalizedNetwork = normalizeWifiNetworkItem(network)
+        return normalizedNetwork === null ? [] : [normalizedNetwork]
+      })
+    : []
+
+  return {
+    available: true,
+    ssid: nonEmptyString(value.ssid),
+    ipAddress: nonEmptyString(value.ipAddress),
+    message,
+    networks,
+  }
+}
+
 export function areHostNetworkStatusesEqual(left: HostNetworkStatus, right: HostNetworkStatus): boolean {
   return (
     left.available === right.available &&

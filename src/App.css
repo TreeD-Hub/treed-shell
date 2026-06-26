@@ -758,6 +758,11 @@ body {
   box-shadow: 0 0 12px var(--color-primary-glow);
 }
 
+.settings-sidebar-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
 .settings-content-shell {
   padding: var(--space-sm);
   overflow-y: auto;

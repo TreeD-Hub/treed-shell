@@ -420,6 +420,59 @@ describe('App', () => {
     expect(screen.getByText('34 г')).toBeInTheDocument()
   }, 10000)
 
+  it('renames dashboard navigation item to print while print is active', async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(getPrinterSnapshot().connection).toBe('online')
+    })
+
+    const previousSnapshot = getPrinterSnapshot()
+    const navigation = screen.getByRole('navigation', { name: /Основная навигация/i })
+
+    try {
+      expect(within(navigation).getByRole('button', { name: 'Главная' })).toBeInTheDocument()
+
+      applyPrinterSnapshot({
+        ...previousSnapshot,
+        source: 'live',
+        state: 'printing',
+        printJob: {
+          ...previousSnapshot.printJob,
+          filename: 'bearing_bracket_mk2.gcode',
+          state: 'printing',
+          isActive: true,
+          isPaused: false,
+        },
+      })
+
+      await waitFor(() => {
+        expect(within(navigation).getByRole('button', { name: 'Печать' })).toBeInTheDocument()
+      })
+      expect(within(navigation).queryByRole('button', { name: 'Главная' })).not.toBeInTheDocument()
+
+      applyPrinterSnapshot({
+        ...previousSnapshot,
+        source: 'live',
+        state: 'complete',
+        printJob: {
+          ...previousSnapshot.printJob,
+          filename: 'bearing_bracket_mk2.gcode',
+          state: 'complete',
+          isActive: false,
+          isPaused: false,
+        },
+      })
+
+      await waitFor(() => {
+        expect(within(navigation).getByRole('button', { name: 'Главная' })).toBeInTheDocument()
+      })
+      expect(within(navigation).queryByRole('button', { name: 'Печать' })).not.toBeInTheDocument()
+    } finally {
+      applyPrinterSnapshot(previousSnapshot)
+    }
+  })
+
   it('renders control widgets and switches parking mode to specific axis', async () => {
     render(<App />)
 
@@ -539,7 +592,7 @@ describe('App', () => {
     expect(screen.queryByText('Команда отключения моторов пока не подключена.')).not.toBeInTheDocument()
   }, 20000)
 
-  it('blocks axis movement during active print with shared command catalog reason', async () => {
+  it('leaves movement tab when print becomes active', async () => {
     render(<App />)
 
     await waitFor(() => {
@@ -549,6 +602,10 @@ describe('App', () => {
     const previousSnapshot = getPrinterSnapshot()
 
     try {
+      fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
+      expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Перемещение')
+      expect(screen.getByRole('button', { name: 'Сдвиг X в плюс' })).toBeInTheDocument()
+
       applyPrinterSnapshot({
         ...previousSnapshot,
         source: 'live',
@@ -562,36 +619,18 @@ describe('App', () => {
         },
       })
 
-      fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
-
-      const moveXPlusButton = screen.getByRole('button', { name: 'Сдвиг X в плюс' })
-      expect(moveXPlusButton.getAttribute('aria-disabled')).toBe('true')
-
-      fireEvent.click(moveXPlusButton)
-
-      expect((await screen.findByTestId('movement-lock-popup')).textContent).toContain(
-        'Перемещение оси: движение недоступно во время печати.',
-      )
-
       await waitFor(() => {
-        expect(screen.getByTestId('motors-disable-button')).toHaveAttribute('aria-disabled', 'true')
+        expect(screen.getByTestId('control-group-movement')).toBeDisabled()
+        expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Нагрев')
       })
-
-      fireEvent.click(screen.getByTestId('motors-disable-button'))
-
-      await waitFor(() => {
-        expect(
-          screen
-            .getAllByTestId('movement-lock-popup')
-            .some((popup) => popup.textContent?.includes('Отключить моторы: движение недоступно во время печати.')),
-        ).toBe(true)
-      })
+      expect(screen.queryByRole('button', { name: 'Сдвиг X в плюс' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Парковка' })).not.toBeInTheDocument()
     } finally {
       applyPrinterSnapshot(previousSnapshot)
     }
   })
 
-  it('blocks parking during active print with shared command catalog reason', async () => {
+  it('blocks movement tab during active print and opens control on heating', async () => {
     render(<App />)
 
     await waitFor(() => {
@@ -616,14 +655,18 @@ describe('App', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
 
-      const parkingAllButton = screen.getByTestId('parking-mode-all')
-      expect(parkingAllButton.getAttribute('aria-disabled')).toBe('true')
+      const movementTab = screen.getByTestId('control-group-movement')
+      expect(movementTab).toBeDisabled()
+      expect(movementTab).toHaveAttribute('aria-disabled', 'true')
+      expect(movementTab).toHaveAttribute('title', 'Перемещение оси: движение недоступно во время печати.')
+      expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Нагрев')
+      expect(screen.queryByRole('heading', { name: 'Парковка' })).not.toBeInTheDocument()
 
-      fireEvent.click(parkingAllButton)
+      fireEvent.click(screen.getByTestId('control-group-lighting'))
+      expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Освещение')
 
-      expect((await screen.findByTestId('movement-lock-popup')).textContent).toContain(
-        'Home all: движение недоступно во время печати.',
-      )
+      fireEvent.click(movementTab)
+      expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Освещение')
     } finally {
       applyPrinterSnapshot(previousSnapshot)
     }

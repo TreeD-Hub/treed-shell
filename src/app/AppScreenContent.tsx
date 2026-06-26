@@ -18,6 +18,7 @@ const SCREEN_PLACEHOLDERS: Record<Exclude<ScreenId, 'dashboard' | 'control' | 'f
 type AppScreenContentProps = {
   activeScreen: ScreenId
   isFilesScreenActive: boolean
+  hasActivePrint: boolean
   dashboard: DashboardContainerProps
   files: FilesContainerProps
   control: ControlContainerProps
@@ -28,6 +29,7 @@ type AppScreenContentProps = {
 export function AppScreenContent({
   activeScreen,
   isFilesScreenActive,
+  hasActivePrint,
   dashboard,
   files,
   control,
@@ -68,7 +70,7 @@ export function AppScreenContent({
         {BOTTOM_NAV_ITEMS.map((item) => (
           <NavItemButton
             key={item.id}
-            label={item.label}
+            label={item.id === 'dashboard' && hasActivePrint ? 'Печать' : item.label}
             icon={item.icon}
             active={item.id === activeScreen}
             aria-current={item.id === activeScreen ? 'page' : undefined}
