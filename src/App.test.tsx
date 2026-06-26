@@ -951,8 +951,10 @@ describe('App', () => {
     expect(screen.getByText('Octopus Pro CAN')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('settings-group-updates'))
-    expect(screen.getByTestId('settings-check-updates-button')).toBeDisabled()
-    expect(screen.getByText(/update capability не подтвержден/i)).toBeInTheDocument()
+    expect(screen.getByTestId('settings-check-updates-button')).toBeEnabled()
+    expect(screen.getByText('TreeD Shell UI')).toBeInTheDocument()
+    expect(screen.getByText('TreeD MainShell OS')).toBeInTheDocument()
+    expect(screen.getAllByText('Mock')).toHaveLength(2)
 
     fireEvent.click(screen.getByTestId('settings-group-console'))
     const consoleInput = screen.getByTestId('settings-console-input') as HTMLTextAreaElement
