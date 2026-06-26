@@ -44,6 +44,7 @@ export function DashboardPrintView({
     ? preferredPreview
     : null
   const displayName = displayPrintFileName ?? DASHBOARD_VALUES.fileName
+  const isPrintActionBusy = isBusy && pendingCommand !== 'adjustZOffset'
 
   return (
     <>
@@ -150,14 +151,14 @@ export function DashboardPrintView({
                       : 'Пауза'
               }
               onClick={onPause}
-              disabled={isBusy || printPauseBlockReason !== null}
+              disabled={isPrintActionBusy || printPauseBlockReason !== null}
             />
             <ActionSquareButton
               icon="actionStopCritical"
               tone="danger"
               label={pendingCommand === 'cancel' ? 'Стоп...' : 'Стоп'}
               onClick={onStopRequest}
-              disabled={isBusy || printCancelBlockReason !== null}
+              disabled={isPrintActionBusy || printCancelBlockReason !== null}
             />
           </div>
         </div>

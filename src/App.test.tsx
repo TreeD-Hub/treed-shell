@@ -379,6 +379,9 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
     fireEvent.click(screen.getByRole('button', { name: 'Babystep плюс 0.05' }))
 
+    expect(screen.getByRole('button', { name: 'Пауза' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Стоп' })).toBeEnabled()
+
     await waitFor(() => {
       expect(getMockCommandOperations()).toEqual(
         expect.arrayContaining([
