@@ -4187,7 +4187,7 @@ body {
   inset: 0;
   z-index: 25;
   background: var(--color-overlay);
-  padding: calc(64px + var(--space-sm)) var(--space-sm) var(--space-sm);
+  padding: var(--space-sm);
   display: grid;
   place-items: center;
   animation: top-popup-layer-enter 0.2s ease-out;
@@ -4198,7 +4198,7 @@ body {
   inset: 0;
   z-index: 30;
   background: var(--color-overlay);
-  padding: calc(64px + var(--space-sm)) var(--space-sm) var(--space-sm);
+  padding: var(--space-sm);
   display: grid;
   place-items: center;
   animation: top-popup-layer-enter 0.2s ease-out;
@@ -4260,7 +4260,7 @@ body {
   inset: 0;
   z-index: 29;
   background: var(--color-overlay);
-  padding: calc(64px + var(--space-sm)) var(--space-sm) var(--space-sm);
+  padding: var(--space-sm);
   display: grid;
   place-items: center;
   animation: top-popup-layer-enter 0.2s ease-out;
@@ -4282,13 +4282,26 @@ body {
 }
 
 .print-tune-modal-dialog.is-temperature {
-  width: min(704px, 100%);
-  max-height: min(444px, calc(100% - (var(--space-xs) * 2)));
-  padding: 10px 14px 12px;
+  width: min(560px, 100%);
+  max-height: min(500px, calc(100% - (var(--space-sm) * 2)));
+  padding: 0;
+  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
 }
 
 .print-tune-modal-dialog.is-temperature.is-temperature-keyboard-open {
-  width: min(904px, 100%);
+  width: min(560px, 100%);
+}
+
+.print-tune-modal-dialog.is-temperature .print-cancel-modal-head {
+  min-height: 48px;
+  align-items: center;
+  padding: 10px 12px 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border-default) 88%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-primary-surface-soft) 22%, transparent), transparent 80%),
+    color-mix(in srgb, var(--color-surface-elevated) 72%, var(--color-block-surface));
 }
 
 .print-tune-modal-dialog.is-compact {
@@ -4367,7 +4380,10 @@ body {
 }
 
 .print-tune-modal-stack-temperature {
+  min-height: 0;
+  height: 100%;
   gap: 0;
+  padding: 10px 12px 12px;
 }
 
 .print-tune-modal-stack-compact {
@@ -4747,24 +4763,39 @@ body {
 .print-temp-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  align-items: start;
+  align-items: stretch;
   gap: 10px;
-  transition: grid-template-columns 0.24s ease;
-}
-
-.print-tune-modal-stack-temperature.is-keyboard-open .print-temp-workspace {
-  grid-template-columns: minmax(0, 1fr) 286px;
+  min-height: 0;
+  align-content: start;
+  overflow-y: auto;
 }
 
 .print-temp-main-panel {
   display: grid;
-  gap: 8px;
+  align-content: start;
   min-width: 0;
-  transition: transform 0.24s ease, opacity 0.24s ease;
+  min-height: 0;
 }
 
 .print-tune-modal-stack-temperature.is-keyboard-open .print-temp-main-panel {
-  transform: translateX(-10px);
+  transform: none;
+}
+
+.print-temp-control-rows {
+  gap: 10px;
+}
+
+.print-temp-control-row {
+  min-height: 82px;
+  grid-template-columns: minmax(92px, 1fr) 78px 230px;
+  padding: 10px;
+}
+
+.print-temp-control-row.is-active {
+  border-color: color-mix(in srgb, var(--color-primary-ring) 58%, var(--color-border-default));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-primary-surface-soft) 16%, transparent), transparent 78%),
+    color-mix(in srgb, var(--color-surface-elevated) 76%, var(--color-block-surface));
 }
 
 .print-tune-compact-workspace {
@@ -5015,6 +5046,57 @@ body {
 .print-temp-keyboard-side.is-compact .print-temp-keyboard-submit {
   height: 34px;
   font-size: var(--font-size-body);
+}
+
+.print-temp-keyboard-side.is-print-tune {
+  padding: 8px;
+  gap: 7px;
+  min-height: 0;
+  align-content: start;
+  grid-template-rows: auto 38px auto 40px;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-primary-surface-soft) 14%, transparent), transparent 70%),
+    color-mix(in srgb, var(--color-surface-elevated) 82%, var(--color-block-surface));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+  animation: none;
+}
+
+.print-temp-keyboard-side.is-print-tune .print-temp-keyboard-head {
+  gap: 6px;
+}
+
+.print-temp-keyboard-side.is-print-tune .print-temp-keyboard-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.print-temp-keyboard-side.is-print-tune .print-temp-keyboard-display {
+  min-height: 38px;
+  border-radius: 10px;
+  font-size: var(--font-size-body-large);
+}
+
+.print-temp-keyboard-side.is-print-tune .print-temp-keyboard-grid {
+  gap: 6px;
+}
+
+.print-temp-keyboard-side.is-print-tune .print-temp-keyboard-key {
+  height: 36px;
+  border-radius: 9px;
+  font-size: var(--font-size-body-large);
+}
+
+.print-temp-keyboard-side.is-print-tune .print-temp-keyboard-submit {
+  height: 40px;
+  border-radius: 10px;
+  font-size: var(--font-size-body);
+}
+
+.print-temp-keyboard-side.is-print-tune .print-temp-keyboard-key:nth-child(10),
+.print-temp-keyboard-side.is-print-tune .print-temp-keyboard-key:nth-child(12) {
+  color: var(--color-primary-light);
 }
 
 .print-temp-keyboard-head {

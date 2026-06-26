@@ -1,13 +1,11 @@
 import type { ReactNode } from 'react'
 
 import type { TemperatureKeyboardTarget } from '../control'
-import { CONTROL_HEATING_PRESET_OPTIONS } from '../control/config'
 import { rounded } from '../dashboard/helpers'
 import {
   HorizontalSteppedSlider,
-  TemperatureTrendChart,
+  IconMask,
   TuneCompactStepperInput,
-  TuneModeToggle,
 } from '../ui'
 import {
   formatTuneKeyboardValue,
@@ -15,21 +13,9 @@ import {
   resolvePrintTuneKeyboardMeta,
   type PrintTuneGroupId,
   type PrintTuneNumericKeyboardTarget,
-  type TemperatureChartMode,
 } from './printTuneKeyboard'
 
 const PRINT_TUNE_MODAL_TITLE_ID = 'print-tune-modal-title'
-
-type TemperatureChartSeries = {
-  id: 'nozzle' | 'bed'
-  label: string
-  tone: 'orange' | 'green'
-  points: Array<{
-    timestamp: number
-    current: number
-    target: number
-  }>
-}
 
 type PrintTuneTemperatureProps = {
   currentNozzleTemp: number
@@ -38,16 +24,12 @@ type PrintTuneTemperatureProps = {
   bedTargetTemp: number
   nozzleMaxC: number
   bedMaxC: number
-  chartMode: TemperatureChartMode
-  chartSeries: TemperatureChartSeries[]
   keyboardTarget: TemperatureKeyboardTarget | null
   keyboardValue: string
-  renderKeyboardPanel: () => ReactNode
+  renderKeyboardPanel: (className?: string) => ReactNode
   onKeyboardOpen: (target: TemperatureKeyboardTarget) => void
-  onChartModeChange: (mode: TemperatureChartMode) => void
   onNozzleTargetChange: (value: number) => void
   onBedTargetChange: (value: number) => void
-  onPresetApply: (nozzle: number, bed: number) => void
 }
 
 type PrintTuneValuesProps = {
@@ -107,38 +89,35 @@ export function PrintTuneModal({
   const isCompactKeyboardOpen = !isTemperatureGroup && keyboard.target !== null
 
   function renderTemperatureTuneContent(): ReactNode {
-    const temperatureRows = [
-      {
-        id: 'nozzle' as const,
-        keyboardTarget: 'nozzle' as const,
-        sensorLabel: 'Extruder',
-        uiLabel: 'Сопло',
-        tone: 'orange' as const,
-        current: temperature.currentNozzleTemp,
-        target: temperature.nozzleTargetTemp,
-        maxTarget: temperature.nozzleMaxC,
-        onTargetChange: temperature.onNozzleTargetChange,
-        testIdPrefix: 'print-tune-temp-nozzle',
-      },
-      {
-        id: 'bed' as const,
-        keyboardTarget: 'bed' as const,
-        sensorLabel: 'Heater Bed',
-        uiLabel: 'Стол',
-        tone: 'green' as const,
-        current: temperature.currentBedTemp,
-        target: temperature.bedTargetTemp,
-        maxTarget: temperature.bedMaxC,
-        onTargetChange: temperature.onBedTargetChange,
-        testIdPrefix: 'print-tune-temp-bed',
-      },
-    ]
-    const chartSeries = temperature.chartSeries.filter((seriesItem) => {
-      if (temperature.chartMode === 'both') {
-        return true
-      }
-      return seriesItem.id === temperature.chartMode
-    })
+    const activeTemperatureRow =
+      activeGroup === 'bed'
+        ? {
+            keyboardTarget: 'bed' as const,
+            uiLabel: 'Стол',
+            icon: 'metricBed' as const,
+            tone: 'green' as const,
+            current: temperature.currentBedTemp,
+            target: temperature.bedTargetTemp,
+            maxTarget: temperature.bedMaxC,
+            onTargetChange: temperature.onBedTargetChange,
+            testIdPrefix: 'print-tune-temp-bed',
+          }
+        : {
+            keyboardTarget: 'nozzle' as const,
+            uiLabel: 'Сопло',
+            icon: 'metricNozzle' as const,
+            tone: 'orange' as const,
+            current: temperature.currentNozzleTemp,
+            target: temperature.nozzleTargetTemp,
+            maxTarget: temperature.nozzleMaxC,
+            onTargetChange: temperature.onNozzleTargetChange,
+            testIdPrefix: 'print-tune-temp-nozzle',
+          }
+
+    const displayTargetValue =
+      temperature.keyboardTarget === activeTemperatureRow.keyboardTarget
+        ? temperature.keyboardValue
+        : String(Math.round(activeTemperatureRow.target))
 
     return (
       <div
@@ -146,102 +125,37 @@ export function PrintTuneModal({
       >
         <div className="print-temp-workspace">
           <section className="print-temp-main-panel">
-            <section className="print-temp-table" aria-label="Параметры температуры">
-              <header className="print-temp-table-head">
-                <span>Датчик</span>
-                <span>Текущая</span>
-                <span>Заданная</span>
-              </header>
-
-              {temperatureRows.map((row) => {
-                const isActiveRow =
-                  temperature.chartMode === 'both'
-                    ? row.id === activeGroup
-                    : row.id === temperature.chartMode
-                const displayTargetValue =
-                  temperature.keyboardTarget === row.keyboardTarget
-                    ? temperature.keyboardValue
-                    : String(Math.round(row.target))
-
-                return (
-                  <div
-                    key={row.id}
-                    className={`print-temp-table-row ${isActiveRow ? 'is-active' : ''}`}
-                  >
-                    <div className="print-temp-table-sensor">
-                      <span className={`print-temp-table-marker ${row.tone === 'orange' ? 'is-orange' : 'is-green'}`} />
-                      <div className="print-temp-table-sensor-text">
-                        <strong>{row.sensorLabel}</strong>
-                        <span>{row.uiLabel}</span>
-                      </div>
-                    </div>
-                    <div className="print-temp-table-value">
-                      {rounded(row.current)} <span>°C</span>
-                    </div>
-                    <TuneCompactStepperInput
-                      value={row.target}
-                      min={0}
-                      max={row.maxTarget}
-                      step={5}
-                      unit="°C"
-                      onChange={row.onTargetChange}
-                      readOnly={true}
-                      displayValue={displayTargetValue}
-                      onInputFocus={() => temperature.onKeyboardOpen(row.keyboardTarget)}
-                      inputAriaLabel={`Целевая температура ${row.uiLabel.toLowerCase()}`}
-                      testIdPrefix={row.testIdPrefix}
-                    />
-                  </div>
-                )
-              })}
-            </section>
-
-            <section className="print-temp-presets" aria-label="Предустановки нагрева">
-              {CONTROL_HEATING_PRESET_OPTIONS.map((preset) => {
-                const isActive =
-                  temperature.nozzleTargetTemp === preset.nozzle &&
-                  temperature.bedTargetTemp === preset.bed
-
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={`print-temp-preset-btn${isActive ? ' is-active' : ''}`}
-                    aria-pressed={isActive}
-                    data-testid={`print-tune-temp-preset-${preset.id}`}
-                    onClick={() => temperature.onPresetApply(preset.nozzle, preset.bed)}
-                  >
-                    <span className="print-temp-preset-label">{preset.label}</span>
-                    <span className="print-temp-preset-values">
-                      {preset.nozzle}° / {preset.bed}°
-                    </span>
-                  </button>
-                )
-              })}
-            </section>
-
-            <div className="print-temp-chart-head">
-              <p className="print-temp-chart-title">Температуры [°C]</p>
-              <TuneModeToggle
-                options={[
-                  { id: 'nozzle', label: 'Сопло' },
-                  { id: 'bed', label: 'Стол' },
-                  { id: 'both', label: 'Общий' },
-                ]}
-                value={temperature.chartMode}
-                onChange={(nextValue) => temperature.onChartModeChange(nextValue as TemperatureChartMode)}
-                testIdPrefix="print-tune-temp-chart"
-                layout="compact"
+            <div className="control-heating-row control-subpanel print-temp-control-row is-active">
+              <div className="control-heating-sensor">
+                <span className={`control-heating-sensor-icon is-${activeTemperatureRow.tone}`} aria-hidden="true">
+                  <IconMask name={activeTemperatureRow.icon} size={18} />
+                </span>
+                <div className="control-heating-sensor-text">
+                  <h3>{activeTemperatureRow.uiLabel}</h3>
+                </div>
+              </div>
+              <div className="control-heating-current">
+                {rounded(activeTemperatureRow.current)} <span>°C</span>
+              </div>
+              <TuneCompactStepperInput
+                value={activeTemperatureRow.target}
+                min={0}
+                max={activeTemperatureRow.maxTarget}
+                step={5}
+                unit="°C"
+                onChange={activeTemperatureRow.onTargetChange}
+                readOnly={true}
+                displayValue={displayTargetValue}
+                onInputFocus={() => temperature.onKeyboardOpen(activeTemperatureRow.keyboardTarget)}
+                inputAriaLabel={`Целевая температура ${activeTemperatureRow.uiLabel.toLowerCase()}`}
+                testIdPrefix={activeTemperatureRow.testIdPrefix}
               />
             </div>
-
-            <TemperatureTrendChart
-              series={chartSeries}
-              testId={activeGroup === 'nozzle' ? 'print-tune-chart-nozzle' : 'print-tune-chart-bed'}
-            />
           </section>
 
-          {temperature.keyboardTarget !== null ? temperature.renderKeyboardPanel() : null}
+          {temperature.keyboardTarget !== null ? (
+            temperature.renderKeyboardPanel('is-print-tune')
+          ) : null}
         </div>
       </div>
     )

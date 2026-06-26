@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { PrintTuneModal, type PrintTuneModalProps } from './PrintTuneModal'
@@ -13,16 +13,12 @@ function createProps(overrides: Partial<PrintTuneModalProps> = {}): PrintTuneMod
       bedTargetTemp: 60,
       nozzleMaxC: 300,
       bedMaxC: 120,
-      chartMode: 'both',
-      chartSeries: [],
       keyboardTarget: null,
       keyboardValue: '',
       renderKeyboardPanel: () => null,
       onKeyboardOpen: vi.fn(),
-      onChartModeChange: vi.fn(),
       onNozzleTargetChange: vi.fn(),
       onBedTargetChange: vi.fn(),
-      onPresetApply: vi.fn(),
     },
     values: {
       fanPercent: 40,
@@ -61,15 +57,45 @@ function createProps(overrides: Partial<PrintTuneModalProps> = {}): PrintTuneMod
 }
 
 describe('PrintTuneModal', () => {
-  it('routes temperature preset clicks through the combined heating target handler', () => {
+  it('renders only the active temperature target without presets or chart', () => {
     const props = createProps()
 
     render(<PrintTuneModal {...props} />)
 
-    fireEvent.click(screen.getByTestId('print-tune-temp-preset-abs'))
+    expect(screen.getByTestId('print-tune-temp-nozzle-input')).toBeInTheDocument()
+    expect(screen.queryByTestId('print-tune-temp-bed-input')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('print-tune-temp-preset-abs')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('print-tune-chart-nozzle')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('print-tune-temp-chart-nozzle')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('print-tune-temp-chart-bed')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('print-tune-temp-chart-both')).not.toBeInTheDocument()
+  })
 
-    expect(props.temperature.onPresetApply).toHaveBeenCalledWith(245, 100)
-    expect(props.temperature.onNozzleTargetChange).not.toHaveBeenCalled()
-    expect(props.temperature.onBedTargetChange).not.toHaveBeenCalled()
+  it('renders the bed temperature target in its own popup state', () => {
+    const props = createProps({ activeGroup: 'bed' })
+
+    render(<PrintTuneModal {...props} />)
+
+    expect(screen.getByTestId('print-tune-temp-bed-input')).toBeInTheDocument()
+    expect(screen.queryByTestId('print-tune-temp-nozzle-input')).not.toBeInTheDocument()
+  })
+
+  it('uses the compact temperature keyboard layout in the print modal', () => {
+    const renderKeyboardPanel = vi.fn((className?: string) => (
+      <aside data-testid="print-temp-keyboard" className={className} />
+    ))
+    const props = createProps({
+      temperature: {
+        ...createProps().temperature,
+        keyboardTarget: 'nozzle',
+        keyboardValue: '215',
+        renderKeyboardPanel,
+      },
+    })
+
+    render(<PrintTuneModal {...props} />)
+
+    expect(renderKeyboardPanel).toHaveBeenCalledWith('is-print-tune')
+    expect(screen.getByTestId('print-temp-keyboard')).toHaveClass('is-print-tune')
   })
 })

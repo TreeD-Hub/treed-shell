@@ -33,7 +33,7 @@ describe('touch kiosk contract', () => {
       const match = appCss.match(new RegExp(`\\.${layer} \\{[^}]+\\}`));
 
       expect(match?.[0]).toContain('inset: 0;');
-      expect(match?.[0]).toContain('padding: calc(64px + var(--space-sm)) var(--space-sm) var(--space-sm);');
+      expect(match?.[0]).toContain('padding: var(--space-sm);');
     }
   });
 });

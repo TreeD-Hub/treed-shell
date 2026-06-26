@@ -351,16 +351,12 @@ export function useHeatingFanController({
     bedTargetTemp: printBedTargetTemp,
     nozzleMaxC: snapshot.limits.nozzleMaxC,
     bedMaxC: snapshot.limits.bedMaxC,
-    chartMode: temperatureChartMode,
-    chartSeries: temperatureChartSeries,
     keyboardTarget: temperatureKeyboardTarget,
     keyboardValue: temperatureKeyboardValue,
     renderKeyboardPanel: renderTemperatureKeyboardPanel,
     onKeyboardOpen: openTemperatureKeyboard,
-    onChartModeChange: setTemperatureChartMode,
     onNozzleTargetChange: handleNozzleTargetChange,
     onBedTargetChange: handleBedTargetChange,
-    onPresetApply: handleHeatingPresetApply,
   }
 
   return {
