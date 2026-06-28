@@ -50,6 +50,7 @@ import './App.css'
 const DEFAULT_SCREEN: ScreenId = 'dashboard'
 const PRINT_CANCEL_MODAL_TITLE_ID = 'print-cancel-modal-title'
 const DEFAULT_BABYSTEP_STEP = BABYSTEP_STEP_OPTIONS[BABYSTEP_STEP_OPTIONS.length - 1]
+const TOOLHEAD_LIGHT_UNAVAILABLE_REASON = 'Подсветка ПГ: команда пока не подключена к runtime.'
 type KeyboardTarget = 'idleNotes' | SettingsKeyboardTarget
 const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
   connecting: 'Подключение',
@@ -83,6 +84,7 @@ function App() {
       limits: snapshot.limits,
       thermalTargets: snapshot.thermalTargets,
       modelFanPercent: snapshot.modelFanPercent,
+      mainLightEnabled: snapshot.mainLightEnabled,
     }),
     [
       printSessionController.commandRuntimePrintJob,
@@ -92,6 +94,7 @@ function App() {
       snapshot.extruderTemp,
       snapshot.homedAxes,
       snapshot.limits,
+      snapshot.mainLightEnabled,
       snapshot.modelFanPercent,
       snapshot.thermalTargets,
       snapshot.toolhead.rawX,
@@ -143,8 +146,6 @@ function App() {
   const [activeControlGroup, setActiveControlGroup] = useState<ControlGroupId>('movement')
   const [isControlMenuCompact, setIsControlMenuCompact] = useState<boolean>(false)
   const [activeControlFlashKey, setActiveControlFlashKey] = useState<string | null>(null)
-  const [isMainLightEnabled, setIsMainLightEnabled] = useState<boolean>(false)
-  const [isToolheadLightEnabled, setIsToolheadLightEnabled] = useState<boolean>(false)
   const maintenanceController = useMaintenanceController()
   const controlFlashTimeoutRef = useRef<number | null>(null)
   const printTuneFanChangeRef = useRef<(value: number) => void>(() => undefined)
@@ -336,6 +337,13 @@ function App() {
   const handleBabystepAdjust = useCallback((deltaMm: number): void => {
     void executeCommand({ command: 'adjustZOffset', deltaMm })
   }, [executeCommand])
+  const handleMainLightToggle = useCallback((): void => {
+    void executeCommand({ command: 'setMainLightEnabled', enabled: !snapshot.mainLightEnabled })
+  }, [executeCommand, snapshot.mainLightEnabled])
+  const mainLightCommandBlockReason = getCommandBlockReason('setMainLightEnabled', {
+    command: 'setMainLightEnabled',
+    enabled: !snapshot.mainLightEnabled,
+  })
 
   function handleScreenSelect(nextScreen: ScreenId): void {
     if (nextScreen !== 'dashboard') {
@@ -670,10 +678,12 @@ function App() {
             getLastCommandError,
             heating: heatingProps,
             fan: fanProps,
-            isMainLightEnabled,
-            isToolheadLightEnabled,
-            onMainLightEnabledChange: setIsMainLightEnabled,
-            onToolheadLightEnabledChange: setIsToolheadLightEnabled,
+            isMainLightEnabled: snapshot.mainLightEnabled,
+            isToolheadLightEnabled: false,
+            mainLightCommandBlockReason,
+            toolheadLightCommandBlockReason: TOOLHEAD_LIGHT_UNAVAILABLE_REASON,
+            onMainLightToggle: handleMainLightToggle,
+            onToolheadLightToggle: () => undefined,
             maintenanceStatus: maintenanceController.status,
             maintenanceHistoryItems: maintenanceController.historyItems,
             maintenanceChecklistItems: maintenanceController.checklistItems,

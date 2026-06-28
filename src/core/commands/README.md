@@ -16,7 +16,7 @@ Mock-команды живут вне production graph в `mocks/runtime.ts` и 
 
 - Печать: `start`, `pause`, `resume`, `cancel`, `emergencyStop`.
 - Парковка и движение: `home`, `homeAll`, `homeX`, `homeY`, `homeXY`, `homeZ`, `moveAxis`, `disableMotors`.
-- Нагрев и обдув: `setNozzleTarget`, `setBedTarget`, `setHeatingTargets`, `turnOffHeaters`, `setFanPercent`.
+- Нагрев, обдув и свет: `setNozzleTarget`, `setBedTarget`, `setHeatingTargets`, `turnOffHeaters`, `setFanPercent`, `setMainLightEnabled`.
 - Runtime tune: speed factor, flow factor, accel, pressure advance, retraction length, Z-offset.
 - Филамент: `loadFilament`, `unloadFilament`.
 - V2/Eddy/shaper: `zParkZeroEddy`, `shaperCalibrateLight`, `shaperCalibrateFull`, `xyMotionTest`.

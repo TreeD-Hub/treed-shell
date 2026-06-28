@@ -21,6 +21,7 @@ const ALL_CAPABILITIES = {
   motion: true,
   thermal: true,
   fan: true,
+  lighting: true,
   filament: true,
   console: true,
   eddy: true,
@@ -58,6 +59,7 @@ const RUNTIME_CONTEXT: TreeDCommandRuntimeContext = {
     bed: 60,
   },
   modelFanPercent: 50,
+  mainLightEnabled: false,
 }
 
 type PrinterCommandsApi = ReturnType<typeof usePrinterCommands>

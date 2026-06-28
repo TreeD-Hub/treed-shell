@@ -2411,6 +2411,21 @@ body {
     color 0.2s ease;
 }
 
+.control-lighting-row:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-soft);
+  opacity: 0.58;
+}
+
+.control-lighting-row:disabled .control-lighting-switch {
+  border-color: color-mix(in srgb, var(--color-border-default) 56%, transparent);
+}
+
+.control-lighting-row:disabled .control-lighting-switch-knob {
+  background: var(--color-text-soft);
+  box-shadow: none;
+}
+
 .control-lighting-icon {
   position: relative;
   width: 44px;

@@ -168,6 +168,7 @@ export interface PrinterRuntimeSnapshot {
   extruderTemp: number
   bedTemp: number
   modelFanPercent: number
+  mainLightEnabled: boolean
   updatedAt: string
   message: string
   hardware: PrinterHardwareSnapshot

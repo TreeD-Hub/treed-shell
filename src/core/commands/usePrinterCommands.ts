@@ -66,6 +66,8 @@ function isCommandConfirmed(
       return isNear(context.thermalTargets?.bed, args.targetCelsius)
     case 'setHeatingTargets':
       return isNear(context.thermalTargets?.nozzle, args.nozzleCelsius) && isNear(context.thermalTargets?.bed, args.bedCelsius)
+    case 'setMainLightEnabled':
+      return context.mainLightEnabled === args.enabled
     default:
       return null
   }

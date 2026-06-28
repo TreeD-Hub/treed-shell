@@ -232,6 +232,37 @@ describe('createMoonrakerCommandClient', () => {
     )
   })
 
+  it('maps main light toggle commands to TreeD chamber light macros', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ result: 'ok' }),
+    })
+    const client = createMoonrakerCommandClient({
+      moonrakerUrl: 'http://moonraker.local',
+      fetchImpl: fetchMock,
+    })
+
+    await client.execute({ command: 'setMainLightEnabled', enabled: true })
+    await client.execute({ command: 'setMainLightEnabled', enabled: false })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://moonraker.local/printer/gcode/script',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ script: 'LIGHT_ON' }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://moonraker.local/printer/gcode/script',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ script: 'LIGHT_OFF' }),
+      }),
+    )
+  })
+
   it('homes X and Y independently', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

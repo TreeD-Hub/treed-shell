@@ -545,11 +545,13 @@ describe('App', () => {
     expect(screen.getByTestId('control-light-toolhead')).toHaveAttribute('aria-pressed', 'false')
     const mainLightButton = screen.getByTestId('control-light-main')
     fireEvent.click(mainLightButton)
-    expect(mainLightButton).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => {
+      expect(getMockCommandOperations()).toContainEqual({ command: 'setMainLightEnabled', enabled: true })
+    })
 
     const toolheadLightButton = screen.getByTestId('control-light-toolhead')
     fireEvent.click(toolheadLightButton)
-    expect(toolheadLightButton).toHaveAttribute('aria-pressed', 'true')
+    expect(toolheadLightButton).toBeDisabled()
 
     fireEvent.click(screen.getByTestId('control-group-movement'))
 

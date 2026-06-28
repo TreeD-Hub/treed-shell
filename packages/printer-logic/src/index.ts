@@ -26,6 +26,7 @@ export type PrinterCommandId =
   | 'setHeatingTargets'
   | 'turnOffHeaters'
   | 'setFanPercent'
+  | 'setMainLightEnabled'
   | 'setPrintSpeedFactorPercent'
   | 'setPrintFlowFactorPercent'
   | 'setPrintAccel'
@@ -96,6 +97,10 @@ export type ExecuteCommandArgs =
   | {
       command: 'setFanPercent'
       percent: number
+    }
+  | {
+      command: 'setMainLightEnabled'
+      enabled: boolean
     }
   | {
       command: 'setPrintSpeedFactorPercent' | 'setPrintFlowFactorPercent'
@@ -314,6 +319,7 @@ export interface PrinterCapabilitiesSnapshot {
   motion: boolean
   thermal: boolean
   fan: boolean
+  lighting: boolean
   filament: boolean
   console: boolean
   eddy: boolean
@@ -667,6 +673,7 @@ export type TreeDCommandCapability =
   | 'motion'
   | 'thermal'
   | 'fan'
+  | 'lighting'
   | 'filament'
   | 'console'
   | 'eddy'
@@ -707,6 +714,7 @@ export interface TreeDCommandRuntimeContext {
     bed: number
   }
   modelFanPercent?: number
+  mainLightEnabled?: boolean
 }
 
 const MIN_FILAMENT_EXTRUDE_TEMP_C = 170
@@ -720,6 +728,7 @@ const COMMAND_CAPABILITY_LABELS: Record<TreeDCommandCapability, string> = {
   motion: 'перемещение',
   thermal: 'нагрев',
   fan: 'обдув',
+  lighting: 'подсветка',
   filament: 'филамент',
   console: 'консоль G-code',
   eddy: 'Eddy/Z-контур',
@@ -854,6 +863,13 @@ export const TREE_D_COMMAND_CATALOG: Record<PrinterCommandId, TreeDCommandCatalo
     risk: 'safe',
     label: 'Обдув модели',
     capability: 'fan',
+    requiresConfirmation: false,
+  },
+  setMainLightEnabled: {
+    id: 'setMainLightEnabled',
+    risk: 'safe',
+    label: 'Основной свет',
+    capability: 'lighting',
     requiresConfirmation: false,
   },
   setPrintSpeedFactorPercent: {

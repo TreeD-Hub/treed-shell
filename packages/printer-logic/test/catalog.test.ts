@@ -28,6 +28,7 @@ const ALL_COMMAND_IDS: PrinterCommandId[] = [
   'setHeatingTargets',
   'turnOffHeaters',
   'setFanPercent',
+  'setMainLightEnabled',
   'setPrintSpeedFactorPercent',
   'setPrintFlowFactorPercent',
   'setPrintAccel',
@@ -54,6 +55,7 @@ const ALL_CAPABILITIES: PrinterCapabilitiesSnapshot = {
   motion: true,
   thermal: true,
   fan: true,
+  lighting: true,
   filament: true,
   console: true,
   eddy: true,
@@ -134,6 +136,7 @@ describe('TREE_D_COMMAND_CATALOG', () => {
 
     expect(isDangerousTreeDCommand('pause')).toBe(false)
     expect(isDangerousTreeDCommand('setFanPercent')).toBe(false)
+    expect(isDangerousTreeDCommand('setMainLightEnabled')).toBe(false)
     expect(isDangerousTreeDCommand('setPrintSpeedFactorPercent')).toBe(false)
     expect(isDangerousTreeDCommand('disableMotors')).toBe(false)
     expect(getTreeDCommandCatalogItem('emergencyStop').requiresConfirmation).toBe(false)
@@ -156,6 +159,13 @@ describe('TREE_D_COMMAND_CATALOG', () => {
     expect(getTreeDCommandBlockReason('setFanPercent', {
       ...IDLE_CONTEXT,
       connection: 'degraded',
+    })).toBeNull()
+    expect(getTreeDCommandBlockReason('setMainLightEnabled', {
+      ...IDLE_CONTEXT,
+      connection: 'degraded',
+    }, {
+      command: 'setMainLightEnabled',
+      enabled: true,
     })).toBeNull()
     expect(getTreeDCommandBlockReason('pause', {
       ...PRINTING_CONTEXT,
