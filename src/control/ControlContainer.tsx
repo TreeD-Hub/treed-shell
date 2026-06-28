@@ -22,6 +22,7 @@ const HEAD_Z_BOUNDS_MM = { min: 0, max: 200 } as const
 export type ControlContainerProps = {
   activeControlGroup: ControlGroupId
   isControlMenuCompact: boolean
+  controlGroupBlockReasons?: Partial<Record<ControlGroupId, string | null>>
   pendingCommand: PrinterCommandId | null
   isBusy: boolean
   activeControlFlashKey: string | null
@@ -56,6 +57,7 @@ export type ControlContainerProps = {
 export function ControlContainer({
   activeControlGroup,
   isControlMenuCompact,
+  controlGroupBlockReasons,
   pendingCommand,
   isBusy,
   activeControlFlashKey,
@@ -126,6 +128,7 @@ export function ControlContainer({
     <ControlPage
       activeControlGroup={activeControlGroup}
       isControlMenuCompact={isControlMenuCompact}
+      controlGroupBlockReasons={controlGroupBlockReasons}
       onControlGroupChange={onControlGroupChange}
       onControlMenuCompactToggle={onControlMenuCompactToggle}
       movement={{

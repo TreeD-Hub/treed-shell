@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { createUnavailableHostNetworkStatus } from '@treed/printer-logic'
 import { createMoonrakerHostNetworkClient } from './hostNetwork'
 
 const statusPayload = {
@@ -76,5 +77,19 @@ describe('createMoonrakerHostNetworkClient', () => {
     })
 
     await expect(client.getStatus()).rejects.toThrow('network component missing')
+  })
+
+  it('returns unavailable status when Moonraker returns invalid host network payload', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      result: 'not a host network status',
+    }))
+    const client = createMoonrakerHostNetworkClient({
+      moonrakerUrl: 'http://moonraker.local',
+      fetchImpl: fetchMock,
+    })
+
+    await expect(client.getStatus()).resolves.toEqual(
+      createUnavailableHostNetworkStatus('Moonraker network endpoint returned invalid HostNetworkStatus.'),
+    )
   })
 })

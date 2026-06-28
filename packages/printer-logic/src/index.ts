@@ -203,6 +203,78 @@ export function createUnavailableHostNetworkStatus(message: string): HostNetwork
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function normalizeWifiNetworkSecurity(value: unknown): WifiNetworkSecurity {
+  if (value === 'open' || value === 'wpa2' || value === 'wpa3') {
+    return value
+  }
+
+  return 'wpa2'
+}
+
+function normalizeSignalPercent(value: unknown): number {
+  const percent = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(percent)) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(100, Math.round(percent)))
+}
+
+function normalizeWifiNetworkItem(value: unknown): WifiNetworkItem | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const ssid = nonEmptyString(value.ssid)
+  if (ssid === null) {
+    return null
+  }
+
+  return {
+    id: nonEmptyString(value.id) ?? ssid,
+    ssid,
+    signalPercent: normalizeSignalPercent(value.signalPercent),
+    security: normalizeWifiNetworkSecurity(value.security),
+    saved: value.saved === true,
+    connected: value.connected === true,
+  }
+}
+
+export function normalizeHostNetworkStatus(value: unknown, fallbackMessage: string): HostNetworkStatus {
+  if (!isRecord(value) || typeof value.available !== 'boolean') {
+    return createUnavailableHostNetworkStatus(fallbackMessage)
+  }
+
+  const message = nonEmptyString(value.message) ?? fallbackMessage
+
+  if (!value.available) {
+    return createUnavailableHostNetworkStatus(message)
+  }
+
+  const networks = Array.isArray(value.networks)
+    ? value.networks.flatMap((network) => {
+        const normalizedNetwork = normalizeWifiNetworkItem(network)
+        return normalizedNetwork === null ? [] : [normalizedNetwork]
+      })
+    : []
+
+  return {
+    available: true,
+    ssid: nonEmptyString(value.ssid),
+    ipAddress: nonEmptyString(value.ipAddress),
+    message,
+    networks,
+  }
+}
+
 export function areHostNetworkStatusesEqual(left: HostNetworkStatus, right: HostNetworkStatus): boolean {
   return (
     left.available === right.available &&
@@ -330,6 +402,19 @@ export interface PrinterFileItem {
   weight: string
   material: string
   addedAt: string
+  preview?: PrinterFilePreview
+}
+
+export interface PrinterFilePreviewImage {
+  src: string
+  width: 48 | 300
+  height: 48 | 300
+  format: 'png'
+}
+
+export interface PrinterFilePreview {
+  small?: PrinterFilePreviewImage
+  large?: PrinterFilePreviewImage
 }
 
 export type PrinterFileSortKey = 'name' | 'addedAt'
@@ -626,6 +711,9 @@ export interface TreeDCommandRuntimeContext {
 
 const MIN_FILAMENT_EXTRUDE_TEMP_C = 170
 const MAX_UI_MOVE_DISTANCE_MM = 50
+export const Z_OFFSET_BABYSTEP_STEP_OPTIONS = [0.01, 0.025, 0.05] as const
+const MIN_Z_OFFSET_BABYSTEP_DELTA_MM = Z_OFFSET_BABYSTEP_STEP_OPTIONS[0]
+const MAX_Z_OFFSET_BABYSTEP_DELTA_MM = Z_OFFSET_BABYSTEP_STEP_OPTIONS[Z_OFFSET_BABYSTEP_STEP_OPTIONS.length - 1]
 
 const COMMAND_CAPABILITY_LABELS: Record<TreeDCommandCapability, string> = {
   print: 'печать',
@@ -1114,6 +1202,17 @@ export function getTreeDCommandArgumentError(
         ?? getRangeError(args.bedCelsius, 0, limits.bedMaxC, 'Температура стола')
     case 'setFanPercent':
       return getRangeError(args.percent, 0, 100, 'Скорость вентилятора')
+    case 'adjustZOffset': {
+      const deltaMagnitude = Math.abs(args.deltaMm)
+      if (
+        !Number.isFinite(args.deltaMm) ||
+        deltaMagnitude < MIN_Z_OFFSET_BABYSTEP_DELTA_MM ||
+        deltaMagnitude > MAX_Z_OFFSET_BABYSTEP_DELTA_MM
+      ) {
+        return `Z-offset delta должен быть конечным числом в диапазоне -${MAX_Z_OFFSET_BABYSTEP_DELTA_MM}…-${MIN_Z_OFFSET_BABYSTEP_DELTA_MM} или ${MIN_Z_OFFSET_BABYSTEP_DELTA_MM}…${MAX_Z_OFFSET_BABYSTEP_DELTA_MM}.`
+      }
+      return null
+    }
     default:
       return null
   }

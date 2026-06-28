@@ -1,5 +1,5 @@
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createHostNetworkClient } from '#runtime'
+import { createHostNetworkClient, createHostUpdateClient } from '#runtime'
 import { AppScreenContent } from './app/AppScreenContent'
 import {
   getTreeDCommandBlockReason,
@@ -49,6 +49,7 @@ import './App.css'
 
 const DEFAULT_SCREEN: ScreenId = 'dashboard'
 const PRINT_CANCEL_MODAL_TITLE_ID = 'print-cancel-modal-title'
+const DEFAULT_BABYSTEP_STEP = BABYSTEP_STEP_OPTIONS[BABYSTEP_STEP_OPTIONS.length - 1]
 type KeyboardTarget = 'idleNotes' | SettingsKeyboardTarget
 const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
   connecting: 'Подключение',
@@ -62,7 +63,7 @@ const CONNECTION_LABELS: Record<PrinterConnectionState, string> = {
 function App() {
   const { snapshot, refresh, deletePrintFile } = usePrinterSnapshot()
   const screenShellRef = useRef<HTMLElement | null>(null)
-  const [babystepStep, setBabystepStep] = useState<number>(BABYSTEP_STEP_OPTIONS[1])
+  const [babystepStep, setBabystepStep] = useState<number>(DEFAULT_BABYSTEP_STEP)
   const [activeScreen, setActiveScreen] = useState<ScreenId>(DEFAULT_SCREEN)
   const printSessionController = usePrintSessionController({ snapshot, deletePrintFile })
   const commandRuntimeContext = useMemo(
@@ -146,11 +147,19 @@ function App() {
   const [isToolheadLightEnabled, setIsToolheadLightEnabled] = useState<boolean>(false)
   const maintenanceController = useMaintenanceController()
   const controlFlashTimeoutRef = useRef<number | null>(null)
+  const printTuneFanChangeRef = useRef<(value: number) => void>(() => undefined)
+  const handlePrintTuneFanPercentChange = useCallback((value: number): void => {
+    printTuneFanChangeRef.current(value)
+  }, [])
 
   const {
     files: effectiveFilesLibrary,
+    activePrintFile,
     selectedPrintFile,
     displayPrintFileName,
+    displayPrintFileNameScrollDistanceCh,
+    isDisplayPrintFileNameScrollable,
+    adjustedEtaTime,
     hasActivePrint,
     isPrintPaused,
     printPauseCommand,
@@ -166,6 +175,11 @@ function App() {
     createCommandHandlers: createPrintSessionCommandHandlers,
   } = printSessionController
   const isBusy = pendingCommand !== null
+  const movementTabBlockReason = hasActivePrint
+    ? getCommandBlockReason('moveAxis', { command: 'moveAxis', axis: 'X', distanceMm: 1 })
+    : null
+  const activeControlGroupForRender =
+    activeControlGroup === 'movement' && movementTabBlockReason !== null ? 'heating' : activeControlGroup
   const {
     activeGroup: activePrintTuneGroup,
     openGroup: openPrintTuneGroup,
@@ -174,12 +188,12 @@ function App() {
     keyboard: printTuneKeyboard,
     createQuickMetrics,
     processMetrics,
-    adjustedEtaTime,
     createModalValues,
     createModalHandlers,
   } = usePrintTuneController({
     hasActivePrint,
     runtimeTune: snapshot.runtimeTune,
+    onFanPercentChange: handlePrintTuneFanPercentChange,
     onPrintSpeedFactorPercentChange: handlePrintSpeedFactorChange,
     onPrintFlowFactorPercentChange: handlePrintFlowFactorChange,
     onPrintAccelChange: handlePrintAccelChange,
@@ -203,6 +217,7 @@ function App() {
     closeTemperatureKeyboard,
     handleFanPercentChange,
   } = heatingController
+  printTuneFanChangeRef.current = handleFanPercentChange
   const isFilesScreenActive = activeScreen === 'files'
   const formattedSnapshotTime = useMemo(() => {
     const parsed = new Date(snapshot.updatedAt)
@@ -217,10 +232,12 @@ function App() {
   const snapshotWifiIpLabel = isRuntimeCurrent ? snapshot.ipAddress : '—'
   const isCloudCapabilityAvailable = snapshot.capabilities.cloud
   const hostNetworkClient = useMemo(() => createHostNetworkClient(), [])
+  const hostUpdateClient = useMemo(() => createHostUpdateClient(), [])
   const settingsController = useSettingsController({
     snapshot,
     connectionLabel,
     networkClient: hostNetworkClient,
+    updateClient: hostUpdateClient,
     executeCommand,
     getCommandBlockReason,
     activeKeyboardTarget: isSettingsKeyboardTarget(activeKeyboardTarget) ? activeKeyboardTarget : null,
@@ -330,6 +347,14 @@ function App() {
 
   function handleControlMenuCompactToggle(): void {
     setIsControlMenuCompact((currentState) => !currentState)
+  }
+
+  function handleControlGroupChange(nextGroup: ControlGroupId): void {
+    if (nextGroup === 'movement' && movementTabBlockReason !== null) {
+      return
+    }
+
+    setActiveControlGroup(nextGroup)
   }
 
   function handleVirtualKeyboardKeyMouseDown(event: MouseEvent<HTMLButtonElement>): void {
@@ -559,6 +584,9 @@ function App() {
     print: {
       hasActivePrint,
       displayPrintFileName,
+      displayPrintFileNameScrollDistanceCh,
+      isDisplayPrintFileNameScrollable,
+      printFilePreview: activePrintFile?.preview,
       printFill,
       adjustedEtaTime,
       displayLayerCurrent,
@@ -610,6 +638,7 @@ function App() {
         <AppScreenContent
           activeScreen={activeScreen}
           isFilesScreenActive={isFilesScreenActive}
+          hasActivePrint={hasActivePrint}
           onScreenSelect={handleScreenSelect}
           dashboard={dashboardProps}
           files={{
@@ -618,15 +647,18 @@ function App() {
             onFileSelect: handlePrintFileSelect,
           }}
           control={{
-            activeControlGroup,
+            activeControlGroup: activeControlGroupForRender,
             isControlMenuCompact,
+            controlGroupBlockReasons: {
+              movement: movementTabBlockReason,
+            },
             pendingCommand,
             isBusy,
             activeControlFlashKey,
             movementMode,
             moveStepKey,
             getCommandBlockReason,
-            onControlGroupChange: setActiveControlGroup,
+            onControlGroupChange: handleControlGroupChange,
             onControlMenuCompactToggle: handleControlMenuCompactToggle,
             onParkingTargetSelect: handleParkingTargetSelect,
             onServiceModeToggle: handleServiceModeToggle,

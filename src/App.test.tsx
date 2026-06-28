@@ -135,6 +135,166 @@ describe('App', () => {
     })
   }, 20000)
 
+  it('renders active print left panel from live job and file metadata', async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(getPrinterSnapshot().connection).toBe('online')
+    })
+
+    const previousSnapshot = getPrinterSnapshot()
+
+    try {
+      applyPrinterSnapshot({
+        ...previousSnapshot,
+        source: 'live',
+        updatedAt: '2026-06-25T09:15:00',
+        state: 'printing',
+        printJob: {
+          ...previousSnapshot.printJob,
+          filename: 'queue/very_long_calibration_tower_for_scroll.gcode',
+          filePath: 'queue/very_long_calibration_tower_for_scroll.gcode',
+          state: 'printing',
+          progress: 0.25,
+          progressPercent: 25,
+          currentLayer: 12,
+          totalLayer: 48,
+          isActive: true,
+          isPaused: false,
+        },
+        printFiles: [
+          {
+            id: 'file-calibration-tower',
+            path: 'queue/very_long_calibration_tower_for_scroll.gcode',
+            name: 'very_long_calibration_tower_for_scroll.gcode',
+            directory: 'queue',
+            printTime: '40 мин',
+            weight: '12 г',
+            material: 'PLA',
+            addedAt: '2026-06-25T08:00:00.000Z',
+            preview: {
+              small: {
+                src: '/server/files/gcodes/.thumbs/tower-48x48.png',
+                width: 48,
+                height: 48,
+                format: 'png',
+              },
+              large: {
+                src: '/server/files/gcodes/.thumbs/tower-300x300.png',
+                width: 300,
+                height: 300,
+                format: 'png',
+              },
+            },
+          },
+        ],
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('print-progress-summary')).toBeInTheDocument()
+      })
+
+      const previewImage = screen.getByAltText('Предпросмотр very_long_calibration_tower_for_scroll.gcode')
+      expect(previewImage).toHaveAttribute('src', '/server/files/gcodes/.thumbs/tower-300x300.png')
+      expect(screen.getByText('very_long_calibration_tower_for_scroll.gcode')).toHaveClass('is-scrollable')
+      expect(screen.getByText('25%')).toBeInTheDocument()
+      expect(screen.getByText('09:45')).toBeInTheDocument()
+      expect(screen.getByText('12 / 48')).toBeInTheDocument()
+      expect(document.querySelector('.job-meter-fill')).toHaveStyle({ width: '25%' })
+    } finally {
+      applyPrinterSnapshot(previousSnapshot)
+    }
+  })
+
+  it('renders active print thermal and quick metrics from live snapshot', async () => {
+    const previousSnapshot = getPrinterSnapshot()
+
+    try {
+      applyPrinterSnapshot({
+        ...previousSnapshot,
+        source: 'live',
+        connection: 'online',
+        state: 'printing',
+        extruderTemp: 193.4,
+        bedTemp: 52.7,
+        modelFanPercent: 37,
+        thermalTargets: {
+          nozzle: 245,
+          bed: 80,
+        },
+        runtimeTune: {
+          ...previousSnapshot.runtimeTune,
+          flowFactorPercent: 92,
+        },
+        printJob: {
+          ...previousSnapshot.printJob,
+          filename: 'queue/thermal_snapshot_check.gcode',
+          filePath: 'queue/thermal_snapshot_check.gcode',
+          state: 'printing',
+          progress: 0.42,
+          progressPercent: 42,
+          isActive: true,
+          isPaused: false,
+        },
+      })
+
+      render(<App />)
+
+      const nozzleGroup = await screen.findByTestId('print-tune-group-nozzle')
+      const bedGroup = screen.getByTestId('print-tune-group-bed')
+      const fanGroup = screen.getByTestId('print-tune-group-fan')
+      const flowGroup = screen.getByTestId('print-tune-group-flow')
+
+      expect(nozzleGroup).toHaveTextContent('193/245°C')
+      expect(bedGroup).toHaveTextContent('53/80°C')
+      expect(fanGroup).toHaveTextContent('37%')
+      expect(flowGroup).toHaveTextContent('92%')
+      expect(screen.getByTestId('print-heat-meter-nozzle-fill')).toHaveStyle({ width: '79%' })
+      expect(screen.getByTestId('print-heat-meter-bed-fill')).toHaveStyle({ width: '66%' })
+    } finally {
+      applyPrinterSnapshot(previousSnapshot)
+    }
+  })
+
+  it('renders active print process metrics from separate live tune fields', async () => {
+    const previousSnapshot = getPrinterSnapshot()
+
+    try {
+      applyPrinterSnapshot({
+        ...previousSnapshot,
+        source: 'live',
+        connection: 'online',
+        state: 'printing',
+        runtimeTune: {
+          ...previousSnapshot.runtimeTune,
+          speedFactorPercent: 123,
+          accelMmS2: 7400,
+          pressureAdvance: 0.055,
+          retractLengthMm: 1.2,
+        },
+        printJob: {
+          ...previousSnapshot.printJob,
+          filename: 'queue/process_metrics_check.gcode',
+          filePath: 'queue/process_metrics_check.gcode',
+          state: 'printing',
+          progress: 0.42,
+          progressPercent: 42,
+          isActive: true,
+          isPaused: false,
+        },
+      })
+
+      render(<App />)
+
+      expect(await screen.findByTestId('print-process-metric-speed-value')).toHaveTextContent('123%')
+      expect(screen.getByTestId('print-process-metric-accel-value')).toHaveTextContent('7400мм/с²')
+      expect(screen.getByTestId('print-process-metric-kFactor-value')).toHaveTextContent('0.055')
+      expect(screen.getByTestId('print-process-metric-retract-value')).toHaveTextContent('1.2мм')
+    } finally {
+      applyPrinterSnapshot(previousSnapshot)
+    }
+  })
+
   it('opens numeric keyboard for temperature input and applies value', async () => {
     render(<App />)
 
@@ -142,7 +302,6 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('control-group-heating'))
 
     const nozzleInput = screen.getByTestId('control-heating-nozzle-input') as HTMLInputElement
-    const confirmedTargetBeforeCommand = nozzleInput.value
     fireEvent.focus(nozzleInput)
     expect(screen.getByRole('button', { name: 'Ввод' })).toBeInTheDocument()
 
@@ -169,7 +328,27 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Ввод' })).not.toBeInTheDocument()
     })
-    expect((screen.getByTestId('control-heating-nozzle-input') as HTMLInputElement).value).toBe(confirmedTargetBeforeCommand)
+    await waitFor(() => {
+      expect((screen.getByTestId('control-heating-nozzle-input') as HTMLInputElement).value).toBe('240')
+    }, { timeout: 3500 })
+
+    fireEvent.click(screen.getByTestId('control-heating-preset-abs'))
+
+    await waitFor(() => {
+      expect(getMockCommandOperations()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            command: 'setHeatingTargets',
+            nozzleCelsius: 245,
+            bedCelsius: 100,
+          }),
+        ]),
+      )
+    })
+    await waitFor(() => {
+      expect((screen.getByTestId('control-heating-nozzle-input') as HTMLInputElement).value).toBe('245')
+      expect((screen.getByTestId('control-heating-bed-input') as HTMLInputElement).value).toBe('100')
+    }, { timeout: 3500 })
   }, 20000)
 
   it('routes print tune speed and Z-offset controls through printer commands', async () => {
@@ -197,8 +376,11 @@ describe('App', () => {
       )
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+    fireEvent.click(screen.getByTestId('print-tune-modal-apply-button'))
     fireEvent.click(screen.getByRole('button', { name: 'Babystep плюс 0.05' }))
+
+    expect(screen.getByRole('button', { name: 'Пауза' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Стоп' })).toBeEnabled()
 
     await waitFor(() => {
       expect(getMockCommandOperations()).toEqual(
@@ -237,6 +419,59 @@ describe('App', () => {
     expect(screen.getByText('2 ч 15 мин')).toBeInTheDocument()
     expect(screen.getByText('34 г')).toBeInTheDocument()
   }, 10000)
+
+  it('renames dashboard navigation item to print while print is active', async () => {
+    render(<App />)
+
+    await waitFor(() => {
+      expect(getPrinterSnapshot().connection).toBe('online')
+    })
+
+    const previousSnapshot = getPrinterSnapshot()
+    const navigation = screen.getByRole('navigation', { name: /Основная навигация/i })
+
+    try {
+      expect(within(navigation).getByRole('button', { name: 'Главная' })).toBeInTheDocument()
+
+      applyPrinterSnapshot({
+        ...previousSnapshot,
+        source: 'live',
+        state: 'printing',
+        printJob: {
+          ...previousSnapshot.printJob,
+          filename: 'bearing_bracket_mk2.gcode',
+          state: 'printing',
+          isActive: true,
+          isPaused: false,
+        },
+      })
+
+      await waitFor(() => {
+        expect(within(navigation).getByRole('button', { name: 'Печать' })).toBeInTheDocument()
+      })
+      expect(within(navigation).queryByRole('button', { name: 'Главная' })).not.toBeInTheDocument()
+
+      applyPrinterSnapshot({
+        ...previousSnapshot,
+        source: 'live',
+        state: 'complete',
+        printJob: {
+          ...previousSnapshot.printJob,
+          filename: 'bearing_bracket_mk2.gcode',
+          state: 'complete',
+          isActive: false,
+          isPaused: false,
+        },
+      })
+
+      await waitFor(() => {
+        expect(within(navigation).getByRole('button', { name: 'Главная' })).toBeInTheDocument()
+      })
+      expect(within(navigation).queryByRole('button', { name: 'Печать' })).not.toBeInTheDocument()
+    } finally {
+      applyPrinterSnapshot(previousSnapshot)
+    }
+  })
 
   it('renders control widgets and switches parking mode to specific axis', async () => {
     render(<App />)
@@ -357,7 +592,7 @@ describe('App', () => {
     expect(screen.queryByText('Команда отключения моторов пока не подключена.')).not.toBeInTheDocument()
   }, 20000)
 
-  it('blocks axis movement during active print with shared command catalog reason', async () => {
+  it('leaves movement tab when print becomes active', async () => {
     render(<App />)
 
     await waitFor(() => {
@@ -367,6 +602,10 @@ describe('App', () => {
     const previousSnapshot = getPrinterSnapshot()
 
     try {
+      fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
+      expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Перемещение')
+      expect(screen.getByRole('button', { name: 'Сдвиг X в плюс' })).toBeInTheDocument()
+
       applyPrinterSnapshot({
         ...previousSnapshot,
         source: 'live',
@@ -380,36 +619,18 @@ describe('App', () => {
         },
       })
 
-      fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
-
-      const moveXPlusButton = screen.getByRole('button', { name: 'Сдвиг X в плюс' })
-      expect(moveXPlusButton.getAttribute('aria-disabled')).toBe('true')
-
-      fireEvent.click(moveXPlusButton)
-
-      expect((await screen.findByTestId('movement-lock-popup')).textContent).toContain(
-        'Перемещение оси: движение недоступно во время печати.',
-      )
-
       await waitFor(() => {
-        expect(screen.getByTestId('motors-disable-button')).toHaveAttribute('aria-disabled', 'true')
+        expect(screen.getByTestId('control-group-movement')).toBeDisabled()
+        expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Нагрев')
       })
-
-      fireEvent.click(screen.getByTestId('motors-disable-button'))
-
-      await waitFor(() => {
-        expect(
-          screen
-            .getAllByTestId('movement-lock-popup')
-            .some((popup) => popup.textContent?.includes('Отключить моторы: движение недоступно во время печати.')),
-        ).toBe(true)
-      })
+      expect(screen.queryByRole('button', { name: 'Сдвиг X в плюс' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Парковка' })).not.toBeInTheDocument()
     } finally {
       applyPrinterSnapshot(previousSnapshot)
     }
   })
 
-  it('blocks parking during active print with shared command catalog reason', async () => {
+  it('blocks movement tab during active print and opens control on heating', async () => {
     render(<App />)
 
     await waitFor(() => {
@@ -434,14 +655,18 @@ describe('App', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Управление' }))
 
-      const parkingAllButton = screen.getByTestId('parking-mode-all')
-      expect(parkingAllButton.getAttribute('aria-disabled')).toBe('true')
+      const movementTab = screen.getByTestId('control-group-movement')
+      expect(movementTab).toBeDisabled()
+      expect(movementTab).toHaveAttribute('aria-disabled', 'true')
+      expect(movementTab).toHaveAttribute('title', 'Перемещение оси: движение недоступно во время печати.')
+      expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Нагрев')
+      expect(screen.queryByRole('heading', { name: 'Парковка' })).not.toBeInTheDocument()
 
-      fireEvent.click(parkingAllButton)
+      fireEvent.click(screen.getByTestId('control-group-lighting'))
+      expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Освещение')
 
-      expect((await screen.findByTestId('movement-lock-popup')).textContent).toContain(
-        'Home all: движение недоступно во время печати.',
-      )
+      fireEvent.click(movementTab)
+      expect(screen.getByTestId('control-active-tab-label')).toHaveTextContent('Освещение')
     } finally {
       applyPrinterSnapshot(previousSnapshot)
     }
@@ -726,8 +951,11 @@ describe('App', () => {
     expect(screen.getByText('Octopus Pro CAN')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('settings-group-updates'))
-    expect(screen.getByTestId('settings-check-updates-button')).toBeDisabled()
-    expect(screen.getByText(/update capability не подтвержден/i)).toBeInTheDocument()
+    expect(screen.getByTestId('settings-check-updates-button')).toBeEnabled()
+    expect(screen.getByText('TreeD Shell UI')).toBeInTheDocument()
+    expect(screen.getByText('TreeD MainShell OS')).toBeInTheDocument()
+    expect(screen.getAllByText('Mock')).toHaveLength(2)
+    expect(screen.getByTestId('settings-apply-system-update-button')).toBeDisabled()
 
     fireEvent.click(screen.getByTestId('settings-group-console'))
     const consoleInput = screen.getByTestId('settings-console-input') as HTMLTextAreaElement

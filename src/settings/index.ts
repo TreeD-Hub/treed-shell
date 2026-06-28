@@ -24,8 +24,15 @@ export {
   SETTINGS_NOTIFICATION_HISTORY,
   SLEEP_MODE_OPTIONS,
   TIMEZONE_OPTIONS,
-  UPDATE_AVAILABLE_VERSION,
+  TREED_MAIN_SHELL_CURRENT_VERSION,
+  UPDATE_CURRENT_VERSION,
+  UPDATE_RELEASE_TARGETS,
   WIFI_NETWORK_LIBRARY,
   type SettingsGroupId,
   type SettingsNotificationItem,
 } from './config'
+export type {
+  UpdateReleaseResult,
+  UpdateReleaseStatus,
+  UpdateReleaseTarget,
+} from './updateReleaseClient'

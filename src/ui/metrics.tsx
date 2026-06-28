@@ -7,13 +7,14 @@ type PlainMetricProps = {
   unit?: string
   className?: string
   valueClassName?: string
+  valueTestId?: string
 }
 
-export function PlainMetric({ label, value, unit, className, valueClassName }: PlainMetricProps) {
+export function PlainMetric({ label, value, unit, className, valueClassName, valueTestId }: PlainMetricProps) {
   return (
     <div className={joinClassNames('metric compact', className)}>
       <p className="label">{label}</p>
-      <p className={joinClassNames('value', valueClassName)}>
+      <p className={joinClassNames('value', valueClassName)} data-testid={valueTestId}>
         {value}
         {unit ? <span>{unit}</span> : null}
       </p>
@@ -25,8 +26,9 @@ type TemperatureMetricProps = {
   label: string
   current: string
   target: number
-  meterTone: 'orange' | 'green'
+  meterTone: 'heat'
   fillPercent: number
+  meterFillTestId?: string
 }
 
 export function TemperatureMetric({
@@ -35,6 +37,7 @@ export function TemperatureMetric({
   target,
   meterTone,
   fillPercent,
+  meterFillTestId,
 }: TemperatureMetricProps) {
   return (
     <div className="metric">
@@ -46,7 +49,7 @@ export function TemperatureMetric({
         <span className="temp-unit">°C</span>
       </p>
       <div className={joinClassNames('meter', meterTone)}>
-        <div className="fill" style={{ width: `${fillPercent}%` }} />
+        <div className="fill" data-testid={meterFillTestId} style={{ width: `${fillPercent}%` }} />
       </div>
     </div>
   )

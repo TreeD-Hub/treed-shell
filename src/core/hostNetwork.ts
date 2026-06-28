@@ -2,6 +2,7 @@ import {
   areHostNetworkStatusesEqual,
   createUnavailableHostNetworkStatus,
   getHostNetworkErrorMessage,
+  normalizeHostNetworkStatus,
   type HostNetworkClient,
   type HostNetworkConnectArgs,
   type HostNetworkForgetArgs,
@@ -13,6 +14,7 @@ export {
   areHostNetworkStatusesEqual,
   createUnavailableHostNetworkStatus,
   getHostNetworkErrorMessage,
+  normalizeHostNetworkStatus,
   type HostNetworkClient,
   type HostNetworkConnectArgs,
   type HostNetworkForgetArgs,
@@ -77,7 +79,10 @@ async function requestHostNetworkStatus(
     )
   }
 
-  return body as HostNetworkStatus
+  return normalizeHostNetworkStatus(
+    body,
+    'Moonraker network endpoint returned invalid HostNetworkStatus.',
+  )
 }
 
 export function isMoonrakerHostNetworkEndpointUnavailable(error: unknown): boolean {

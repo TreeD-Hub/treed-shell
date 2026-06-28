@@ -1,4 +1,9 @@
 import type { WifiNetworkItem, WifiNetworkSecurity } from '@treed/printer-logic'
+import {
+  treedMainShellReleaseApiUrl,
+  treedShellReleaseApiUrl,
+} from '../config'
+import type { UpdateReleaseTarget } from './updateReleaseClient'
 import type { SettingsMenuOption } from '../ui'
 
 export type { WifiNetworkItem, WifiNetworkSecurity }
@@ -69,7 +74,25 @@ export const TIMEZONE_OPTIONS = [
 export const DEFAULT_TIMEZONE_OPTION = '(UTC+03:00) Москва, Санкт-Петербург'
 export const LANGUAGE_OPTIONS = ['Русский', 'English'] as const
 export const UPDATE_CURRENT_VERSION = '0.1.0'
-export const UPDATE_AVAILABLE_VERSION = '0.1.1'
+export const TREED_MAIN_SHELL_CURRENT_VERSION = '0.1.0'
+export const UPDATE_RELEASE_TARGETS: UpdateReleaseTarget[] = [
+  {
+    id: 'treed-shell',
+    label: 'TreeD Shell UI',
+    currentVersion: UPDATE_CURRENT_VERSION,
+    releaseApiUrl: treedShellReleaseApiUrl,
+    tagPrefix: 'ui-main-',
+    versionScheme: 'tag',
+  },
+  {
+    id: 'treed-mainshellos',
+    label: 'TreeD MainShell OS',
+    currentVersion: TREED_MAIN_SHELL_CURRENT_VERSION,
+    releaseApiUrl: treedMainShellReleaseApiUrl,
+    tagPrefix: 'v',
+    versionScheme: 'semver',
+  },
+]
 
 export const SETTINGS_NOTIFICATION_HISTORY: SettingsNotificationItem[] = [
   {

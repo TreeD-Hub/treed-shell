@@ -5,6 +5,7 @@ import {
   filterWifiNetworks,
   getHostNetworkErrorMessage,
   getPreferredWifiNetworkId,
+  normalizeHostNetworkStatus,
   type HostNetworkStatus,
   type WifiNetworkItem,
 } from '../src'
@@ -72,5 +73,50 @@ describe('Wi-Fi network helpers', () => {
     expect(areHostNetworkStatusesEqual(unavailable, changed)).toBe(false)
     expect(getHostNetworkErrorMessage(new Error('nmcli failed'), 'fallback')).toBe('nmcli failed')
     expect(getHostNetworkErrorMessage('', 'fallback')).toBe('fallback')
+  })
+
+  it('normalizes host network runtime responses before UI consumes them', () => {
+    expect(normalizeHostNetworkStatus(null, 'invalid network response')).toEqual(
+      createUnavailableHostNetworkStatus('invalid network response'),
+    )
+
+    expect(normalizeHostNetworkStatus({
+      available: true,
+      ssid: 'TreeD Lab',
+      ipAddress: '',
+      message: '',
+      networks: [
+        {
+          id: '',
+          ssid: 'TreeD Lab',
+          signalPercent: 140,
+          security: 'wpa-enterprise',
+          saved: true,
+          connected: true,
+        },
+        {
+          id: 'broken',
+          signalPercent: 80,
+          security: 'wpa2',
+          saved: false,
+          connected: false,
+        },
+      ],
+    }, 'invalid network response')).toEqual({
+      available: true,
+      ssid: 'TreeD Lab',
+      ipAddress: null,
+      message: 'invalid network response',
+      networks: [
+        {
+          id: 'TreeD Lab',
+          ssid: 'TreeD Lab',
+          signalPercent: 100,
+          security: 'wpa2',
+          saved: true,
+          connected: true,
+        },
+      ],
+    })
   })
 })

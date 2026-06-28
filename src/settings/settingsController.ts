@@ -3,6 +3,7 @@ import {
   getPreferredWifiNetworkId,
   type WifiNetworkItem,
 } from '@treed/printer-logic'
+import { runtimeMode } from '#runtime'
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ExecuteCommandArgs, PrinterCommandId } from '../core/commands'
 import { downloadDiagnosticReport } from '../diagnostics'
@@ -13,6 +14,11 @@ import {
   type HostNetworkClient,
   type HostNetworkStatus,
 } from '../core/hostNetwork'
+import {
+  isMoonrakerHostUpdateEndpointUnavailable,
+  type HostUpdateClient,
+  type HostUpdateStatus,
+} from '../core/hostUpdate'
 import type { PrinterSnapshot } from '../core/transport/types'
 import {
   DEFAULT_TIMEZONE_OPTION,
@@ -20,12 +26,17 @@ import {
   SETTINGS_NOTIFICATION_HISTORY,
   SLEEP_MODE_OPTIONS,
   TIMEZONE_OPTIONS,
-  UPDATE_AVAILABLE_VERSION,
   UPDATE_CURRENT_VERSION,
+  UPDATE_RELEASE_TARGETS,
   type SettingsGroupId,
   type SettingsNotificationItem,
 } from './config'
 import type { SettingsPageProps } from './SettingsPage'
+import {
+  checkUpdateReleases,
+  createMockUpdateReleaseResults,
+  createUnknownUpdateReleaseResults,
+} from './updateReleaseClient'
 
 export type { WifiNetworkItem } from '@treed/printer-logic'
 
@@ -43,6 +54,7 @@ type UseSettingsControllerArgs = {
   snapshot: PrinterSnapshot
   connectionLabel: string
   networkClient: HostNetworkClient
+  updateClient: HostUpdateClient
   executeCommand: (args: ExecuteCommandArgs) => Promise<boolean>
   getCommandBlockReason: (command: PrinterCommandId, args?: ExecuteCommandArgs) => string | null
   activeKeyboardTarget: SettingsKeyboardTarget | null
@@ -108,6 +120,7 @@ export function useSettingsController({
   snapshot,
   connectionLabel,
   networkClient,
+  updateClient,
   executeCommand,
   getCommandBlockReason,
   activeKeyboardTarget,
@@ -130,8 +143,18 @@ export function useSettingsController({
   const [isCloudAiMonitoringEnabled, setIsCloudAiMonitoringEnabled] = useState<boolean>(false)
   const [cloudConnectionNotice, setCloudConnectionNotice] = useState<string>('Сервис облака не подключен.')
   const [isCheckingUpdates, setIsCheckingUpdates] = useState<boolean>(false)
-  const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null)
-  const [updateNotice, setUpdateNotice] = useState<string>('Проверьте наличие новых версий.')
+  const [isApplyingUpdate, setIsApplyingUpdate] = useState<boolean>(false)
+  const [canApplySystemUpdate, setCanApplySystemUpdate] = useState<boolean>(false)
+  const [updateReleaseResults, setUpdateReleaseResults] = useState(() =>
+    runtimeMode === 'mock'
+      ? createMockUpdateReleaseResults(UPDATE_RELEASE_TARGETS)
+      : createUnknownUpdateReleaseResults(UPDATE_RELEASE_TARGETS),
+  )
+  const [updateNotice, setUpdateNotice] = useState<string>(
+    runtimeMode === 'mock'
+      ? 'Mock: GitHub Releases не проверяются.'
+      : 'Проверьте наличие новых версий.',
+  )
   const [consoleCommandValue, setConsoleCommandValue] = useState<string>('')
   const [pendingConsoleCommand, setPendingConsoleCommand] = useState<string | null>(null)
   const [consoleHistory, setConsoleHistory] = useState<Array<{ id: string; command: string; createdAt: string }>>([])
@@ -151,7 +174,7 @@ export function useSettingsController({
   const consoleInputRef = useRef<HTMLTextAreaElement | null>(null)
   const isNetworkCapabilityAvailable = hostNetworkStatus.available
   const isCloudCapabilityAvailable = snapshot.capabilities.cloud
-  const isUpdatesCapabilityAvailable = snapshot.capabilities.updates
+  const isUpdatesCapabilityAvailable = runtimeMode === 'mock' || typeof fetch === 'function'
   const wifiIpLabel = hostNetworkStatus.ipAddress ?? '—'
   const networkCapabilityNotice = isNetworkCapabilityAvailable
     ? hostNetworkStatus.message
@@ -161,7 +184,11 @@ export function useSettingsController({
     : 'Недоступно: Moonraker/V2 cloud capability не подтвержден.'
   const updateCapabilityNotice = isUpdatesCapabilityAvailable
     ? updateNotice
-    : 'Недоступно: Moonraker/V2 update capability не подтвержден.'
+    : 'Недоступно: runtime не поддерживает fetch для проверки GitHub Releases.'
+  const mainShellUpdateResult = useMemo(
+    () => updateReleaseResults.find((release) => release.id === 'treed-mainshellos') ?? null,
+    [updateReleaseResults],
+  )
   const selectedWifiNetwork = useMemo(() => {
     if (selectedWifiNetworkId === null) {
       return null
@@ -405,16 +432,71 @@ export function useSettingsController({
     setIsCloudAiMonitoringEnabled(nextValue)
   }
 
-  function handleCheckUpdates(): void {
+  async function handleCheckUpdates(): Promise<void> {
     if (!isUpdatesCapabilityAvailable) {
       setUpdateNotice(updateCapabilityNotice)
       return
     }
 
+    if (runtimeMode === 'mock') {
+      setUpdateReleaseResults(createMockUpdateReleaseResults(UPDATE_RELEASE_TARGETS))
+      setUpdateNotice('Mock: GitHub Releases не проверяются.')
+      setCanApplySystemUpdate(false)
+      return
+    }
+
     setIsCheckingUpdates(true)
-    setAvailableUpdateVersion(UPDATE_AVAILABLE_VERSION)
-    setUpdateNotice(`Доступна версия ${UPDATE_AVAILABLE_VERSION}.`)
+    try {
+      const status = await updateClient.check()
+      applyHostUpdateStatus(status)
+      return
+    } catch (error) {
+      if (!isMoonrakerHostUpdateEndpointUnavailable(error)) {
+        setUpdateNotice(error instanceof Error ? error.message : 'Не удалось проверить host update endpoint.')
+        setCanApplySystemUpdate(false)
+        return
+      }
+    } finally {
+      setIsCheckingUpdates(false)
+    }
+
+    setIsCheckingUpdates(true)
+    const results = await checkUpdateReleases(UPDATE_RELEASE_TARGETS)
+    const availableCount = results.filter((result) => result.status === 'available').length
+    const errorCount = results.filter((result) => result.status === 'error').length
+
+    setUpdateReleaseResults(results)
+    setCanApplySystemUpdate(false)
+    setUpdateNotice(
+      errorCount > 0
+        ? `Проверка завершена с ошибками: ${errorCount}.`
+        : `Host update endpoint недоступен. Read-only проверка: доступно обновлений ${availableCount}.`,
+    )
     setIsCheckingUpdates(false)
+  }
+
+  function applyHostUpdateStatus(status: HostUpdateStatus): void {
+    setUpdateReleaseResults(status.releaseResults)
+    setCanApplySystemUpdate(status.canApply)
+    setUpdateNotice(status.message)
+  }
+
+  async function handleApplySystemUpdate(): Promise<void> {
+    if (!canApplySystemUpdate || mainShellUpdateResult === null) {
+      setUpdateNotice('Системное обновление недоступно.')
+      return
+    }
+
+    setIsApplyingUpdate(true)
+    try {
+      const status = await updateClient.apply({ targetTag: mainShellUpdateResult.latestTag })
+      applyHostUpdateStatus(status)
+    } catch (error) {
+      setCanApplySystemUpdate(false)
+      setUpdateNotice(error instanceof Error ? error.message : 'Не удалось запустить системное обновление.')
+    } finally {
+      setIsApplyingUpdate(false)
+    }
   }
 
   function handleConsoleInputChange(event: ChangeEvent<HTMLTextAreaElement>): void {
@@ -625,11 +707,14 @@ export function useSettingsController({
       onAiMonitoringToggle: handleCloudAiMonitoringToggle,
     },
     updates: {
-      availableUpdateVersion,
+      releaseResults: updateReleaseResults,
       isCheckingUpdates,
+      isApplyingUpdate,
+      canApplySystemUpdate,
       isCapabilityAvailable: isUpdatesCapabilityAvailable,
       notice: updateCapabilityNotice,
       onCheckUpdates: handleCheckUpdates,
+      onApplySystemUpdate: handleApplySystemUpdate,
     },
     language: {
       languageValue,

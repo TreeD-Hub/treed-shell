@@ -25,4 +25,15 @@ describe('touch kiosk contract', () => {
     expect(indexCss).toContain('cursor: none !important;');
     expect(appCss).not.toContain(':hover');
   });
+
+  test('modal backdrops cover the full printer screen', () => {
+    const appCss = readFileSync('src/App.css', 'utf8');
+
+    for (const layer of ['file-modal-layer', 'print-cancel-modal-layer', 'print-tune-modal-layer']) {
+      const match = appCss.match(new RegExp(`\\.${layer} \\{[^}]+\\}`));
+
+      expect(match?.[0]).toContain('inset: 0;');
+      expect(match?.[0]).toContain('padding: var(--space-sm);');
+    }
+  });
 });

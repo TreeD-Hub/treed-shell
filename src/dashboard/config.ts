@@ -1,15 +1,16 @@
 import type { UiIconName } from '../ui/iconAssets'
+export { Z_OFFSET_BABYSTEP_STEP_OPTIONS as BABYSTEP_STEP_OPTIONS } from '@treed/printer-logic'
 
 export type TemperatureMetricDefinition = {
   key: 'nozzle' | 'bed'
   label: string
   target: number
-  meterTone: 'orange' | 'green'
+  meterTone: 'heat'
 }
 
 export const TEMPERATURE_METRIC_DEFINITIONS: readonly TemperatureMetricDefinition[] = [
-  { key: 'nozzle', label: 'Сопло', target: 220, meterTone: 'orange' },
-  { key: 'bed', label: 'Стол', target: 60, meterTone: 'green' },
+  { key: 'nozzle', label: 'Сопло', target: 220, meterTone: 'heat' },
+  { key: 'bed', label: 'Стол', target: 60, meterTone: 'heat' },
 ]
 
 export const DASHBOARD_VALUES = {
@@ -19,8 +20,6 @@ export const DASHBOARD_VALUES = {
   layerCurrent: 145,
   layerTotal: 218,
 } as const
-
-export const BABYSTEP_STEP_OPTIONS = [0.1, 0.05, 0.025] as const
 
 export type TopStatusButtonId = 'wifi' | 'cloud' | 'notifications' | 'power'
 

@@ -12,12 +12,12 @@ import {
   SETTINGS_GROUP_OPTIONS,
   SLEEP_MODE_OPTIONS,
   TIMEZONE_OPTIONS,
-  UPDATE_CURRENT_VERSION,
   type SettingsGroupId,
   type SettingsNotificationItem,
   type WifiNetworkItem,
   type WifiNetworkSecurity,
 } from './config'
+import type { UpdateReleaseResult, UpdateReleaseStatus } from './updateReleaseClient'
 
 export type ConsoleHistoryItem = {
   id: string
@@ -86,11 +86,14 @@ export type SettingsPageProps = {
     onAiMonitoringToggle: (checked: boolean) => void
   }
   updates: {
-    availableUpdateVersion: string | null
+    releaseResults: UpdateReleaseResult[]
     isCheckingUpdates: boolean
+    isApplyingUpdate: boolean
+    canApplySystemUpdate: boolean
     isCapabilityAvailable: boolean
     notice: string
     onCheckUpdates: () => void
+    onApplySystemUpdate: () => void
   }
   language: {
     languageValue: string
@@ -116,6 +119,26 @@ function wifiSecurityLabel(security: WifiNetworkSecurity): string {
   }
 
   return security.toUpperCase()
+}
+
+function updateReleaseStatusLabel(status: UpdateReleaseStatus): string {
+  if (status === 'available') {
+    return 'Доступно'
+  }
+
+  if (status === 'latest') {
+    return 'Актуально'
+  }
+
+  if (status === 'error') {
+    return 'Ошибка'
+  }
+
+  if (status === 'mock') {
+    return 'Mock'
+  }
+
+  return 'Нет данных'
 }
 
 export function SettingsPage({
@@ -451,8 +474,20 @@ export function SettingsPage({
                 <p>Проверка актуальности версии и доступных обновлений.</p>
               </header>
               <article className="settings-description-card">
-                <p><span>Текущая версия</span><strong>{UPDATE_CURRENT_VERSION}</strong></p>
-                <p><span>Доступная версия</span><strong>{updates.availableUpdateVersion ?? 'Нет данных'}</strong></p>
+                {updates.releaseResults.map((release) => (
+                  <p key={release.id}>
+                    <span>{release.label}</span>
+                    <strong>
+                      {release.currentVersion} / {release.latestVersion ?? release.latestTag ?? 'Нет данных'}
+                    </strong>
+                  </p>
+                ))}
+                {updates.releaseResults.map((release) => (
+                  <p key={`${release.id}-status`}>
+                    <span>{release.label} статус</span>
+                    <strong>{updateReleaseStatusLabel(release.status)}</strong>
+                  </p>
+                ))}
               </article>
               <div className="settings-cloud-actions">
                 <button
@@ -463,6 +498,19 @@ export function SettingsPage({
                   disabled={updates.isCheckingUpdates || !updates.isCapabilityAvailable}
                 >
                   {updates.isCheckingUpdates ? 'Проверка...' : 'Проверить обновления'}
+                </button>
+                <button
+                  type="button"
+                  className="settings-network-btn"
+                  onClick={updates.onApplySystemUpdate}
+                  data-testid="settings-apply-system-update-button"
+                  disabled={
+                    updates.isCheckingUpdates ||
+                    updates.isApplyingUpdate ||
+                    !updates.canApplySystemUpdate
+                  }
+                >
+                  {updates.isApplyingUpdate ? 'Запуск...' : 'Обновить систему'}
                 </button>
               </div>
               <p className="settings-cloud-notice">{updates.notice}</p>

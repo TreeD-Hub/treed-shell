@@ -295,4 +295,43 @@ describe('TREE_D_COMMAND_CATALOG', () => {
       deltaMm: 0.025,
     })).toContain('Home Z')
   })
+
+  it('blocks Z-offset baby steps outside the live tuning range', () => {
+    expect(getTreeDCommandBlockReason('adjustZOffset', {
+      ...PRINTING_CONTEXT,
+      homedAxes: 'xyz',
+    }, {
+      command: 'adjustZOffset',
+      deltaMm: 0.01,
+    })).toBeNull()
+    expect(getTreeDCommandBlockReason('adjustZOffset', {
+      ...PRINTING_CONTEXT,
+      homedAxes: 'xyz',
+    }, {
+      command: 'adjustZOffset',
+      deltaMm: -0.05,
+    })).toBeNull()
+
+    expect(getTreeDCommandBlockReason('adjustZOffset', {
+      ...PRINTING_CONTEXT,
+      homedAxes: 'xyz',
+    }, {
+      command: 'adjustZOffset',
+      deltaMm: 0,
+    })).toContain('0.01…0.05')
+    expect(getTreeDCommandBlockReason('adjustZOffset', {
+      ...PRINTING_CONTEXT,
+      homedAxes: 'xyz',
+    }, {
+      command: 'adjustZOffset',
+      deltaMm: 0.1,
+    })).toContain('0.01…0.05')
+    expect(getTreeDCommandBlockReason('adjustZOffset', {
+      ...PRINTING_CONTEXT,
+      homedAxes: 'xyz',
+    }, {
+      command: 'adjustZOffset',
+      deltaMm: Number.NaN,
+    })).toContain('0.01…0.05')
+  })
 })

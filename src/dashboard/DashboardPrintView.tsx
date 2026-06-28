@@ -1,9 +1,11 @@
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import {
   ActionSquareButton,
   PlainMetric,
   PrintPreviewIcon,
+  joinClassNames,
 } from '../ui'
+import { getPreferredPreviewImage, getPreviewSrcSet } from '../ui/printFilePreview'
 import { BABYSTEP_STEP_OPTIONS, DASHBOARD_VALUES } from './config'
 import { DashboardTemperatureMetricGrid } from './DashboardTemperatureWidgets'
 import type { DashboardPrintViewProps } from './DashboardPage.types'
@@ -11,6 +13,9 @@ import type { DashboardPrintViewProps } from './DashboardPage.types'
 export function DashboardPrintView({
   statusDock,
   displayPrintFileName,
+  displayPrintFileNameScrollDistanceCh,
+  isDisplayPrintFileNameScrollable,
+  printFilePreview,
   printFill,
   adjustedEtaTime,
   displayLayerCurrent,
@@ -33,18 +38,48 @@ export function DashboardPrintView({
   onBabystepStepChange,
   onBabystepAdjust,
 }: DashboardPrintViewProps) {
+  const preferredPreview = getPreferredPreviewImage(printFilePreview)
+  const [failedPreviewSrc, setFailedPreviewSrc] = useState<string | null>(null)
+  const previewImage = preferredPreview !== null && preferredPreview.src !== failedPreviewSrc
+    ? preferredPreview
+    : null
+  const displayName = displayPrintFileName ?? DASHBOARD_VALUES.fileName
+  const isPrintActionBusy = isBusy && pendingCommand !== 'adjustZOffset'
+
   return (
     <>
       <section className="job-card">
         {statusDock}
         <div className="preview-panel">
-          <div className="preview-inner">
-            <PrintPreviewIcon />
+          <div className={joinClassNames('preview-inner', previewImage !== null && 'has-image')} aria-hidden={previewImage === null ? 'true' : undefined}>
+            {previewImage !== null ? (
+              <img
+                className="preview-image"
+                src={previewImage.src}
+                srcSet={getPreviewSrcSet(printFilePreview)}
+                sizes="300px"
+                width={previewImage.width}
+                height={previewImage.height}
+                alt={`Предпросмотр ${displayName}`}
+                decoding="async"
+                draggable={false}
+                onError={() => setFailedPreviewSrc(previewImage.src)}
+              />
+            ) : (
+              <PrintPreviewIcon />
+            )}
           </div>
         </div>
 
         <div className="job-info">
-          <p className="job-name">{displayPrintFileName ?? DASHBOARD_VALUES.fileName}</p>
+          <p className="job-name">
+            <span
+              className={joinClassNames('job-name-text', isDisplayPrintFileNameScrollable && 'is-scrollable')}
+              style={{ '--job-name-scroll-distance': `${displayPrintFileNameScrollDistanceCh}ch` } as CSSProperties}
+            >
+              {displayName}
+            </span>
+          </p>
 
           <div className="print-tune-hitbox print-tune-hitbox-progress" data-testid="print-progress-summary">
             <div className="job-metrics">
@@ -116,14 +151,14 @@ export function DashboardPrintView({
                       : 'Пауза'
               }
               onClick={onPause}
-              disabled={isBusy || printPauseBlockReason !== null}
+              disabled={isPrintActionBusy || printPauseBlockReason !== null}
             />
             <ActionSquareButton
               icon="actionStopCritical"
               tone="danger"
               label={pendingCommand === 'cancel' ? 'Стоп...' : 'Стоп'}
               onClick={onStopRequest}
-              disabled={isBusy || printCancelBlockReason !== null}
+              disabled={isPrintActionBusy || printCancelBlockReason !== null}
             />
           </div>
         </div>
@@ -145,6 +180,7 @@ export function DashboardPrintView({
                     value={metric.value}
                     unit={metric.unit}
                     valueClassName="process-value"
+                    valueTestId={`print-process-metric-${metric.key}-value`}
                   />
                 </button>
               ))}

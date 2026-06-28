@@ -18,6 +18,7 @@ import type {
 type ControlPageProps = {
   activeControlGroup: ControlGroupId
   isControlMenuCompact: boolean
+  controlGroupBlockReasons?: Partial<Record<ControlGroupId, string | null>>
   onControlGroupChange: (groupId: ControlGroupId) => void
   onControlMenuCompactToggle: () => void
   movement: MovementControlPanelProps
@@ -30,6 +31,7 @@ type ControlPageProps = {
 export const ControlPage = memo(function ControlPage({
   activeControlGroup,
   isControlMenuCompact,
+  controlGroupBlockReasons,
   onControlGroupChange,
   onControlMenuCompactToggle,
   movement,
@@ -62,6 +64,7 @@ export const ControlPage = memo(function ControlPage({
             ariaLabel="Разделы управления"
             testIdPrefix="control-group"
             iconSize={28}
+            disabledReasons={controlGroupBlockReasons}
           />
         </aside>
 

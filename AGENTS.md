@@ -281,6 +281,7 @@ Definition of Done для MVP-задач:
 - Глобальные стили приложения: `src/index.css`, `src/App.css`.
 - Повторяемые кнопки, карточки, метрики, переключатели и control widgets выносить в `src/ui`, а не копировать локально в экран.
 - Не тащить в проект чужой дизайн-язык без прямого запроса, кроме явно зафиксированного ниже направления.
+- Для организации поведения кнопок, live/fine-tune controls, Z-offset и привычных printer UI паттернов можно сверяться с исходниками KlipperScreen на GitHub: `https://github.com/KlipperScreen/KlipperScreen`. Использовать их как reference по UX/логике, но не копировать команды без проверки контрактов `treed-shell`, Moonraker и `treed-mainshellOS`.
 
 Стиль всего интерфейса:
 - интерфейс должен быть в направлении `Nothing-inspired`;
