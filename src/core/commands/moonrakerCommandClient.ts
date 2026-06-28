@@ -244,15 +244,15 @@ function commandSuccessMessage(args: ExecuteCommandArgs): string {
     case 'consoleGcode':
       return 'Console G-code sent'
     case 'rebootHost':
-      return 'Host reboot sent'
+      return 'Команда перезагрузки хоста отправлена'
     case 'restartKlipper':
-      return 'Klipper restart sent'
+      return 'Команда перезапуска Klipper отправлена'
     case 'firmwareRestart':
-      return 'Firmware restart sent'
+      return 'Команда перезапуска прошивки отправлена'
     case 'restartMoonraker':
-      return 'Moonraker restart sent'
+      return 'Команда перезапуска Moonraker отправлена'
     case 'shutdownHost':
-      return 'Host shutdown sent'
+      return 'Команда выключения хоста отправлена'
     default:
       return 'Command sent'
   }
@@ -370,7 +370,7 @@ function executeMoonrakerCommand(
       return sendScript((args.script ?? args.gcode ?? '').trim(), options, args.command)
     case 'rebootHost':
       if (options.capabilities.power !== true) {
-        return buildUnsupportedResult(args.command, 'Host reboot is not supported through this Moonraker client')
+        return buildUnsupportedResult(args.command, 'Перезагрузка хоста не поддерживается этим Moonraker-клиентом')
       }
       return callMoonraker('/machine/reboot', undefined, options, args.command)
     case 'restartKlipper':
@@ -385,7 +385,7 @@ function executeMoonrakerCommand(
       }
       return buildUnsupportedResult(
         args.command,
-        'Shutdown host is not supported through this Moonraker client',
+        'Выключение хоста не поддерживается этим Moonraker-клиентом',
       )
   }
 }

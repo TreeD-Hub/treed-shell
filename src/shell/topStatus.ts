@@ -35,29 +35,29 @@ export type PowerMenuActionState = PowerMenuAction & {
 export const POWER_MENU_ACTIONS: PowerMenuAction[] = [
   {
     command: 'restartKlipper',
-    label: 'Restart Klipper',
-    details: 'Перезапустить Klipper без перезагрузки host.',
+    label: 'Перезапустить Klipper',
+    details: 'Перезапускает сервис Klipper без перезагрузки хоста.',
   },
   {
     command: 'firmwareRestart',
-    label: 'Firmware restart',
-    details: 'Перезапустить прошивки MCU через Klipper.',
+    label: 'Перезапустить прошивку',
+    details: 'Отправляет перезапуск прошивки MCU через Klipper.',
   },
   {
     command: 'restartMoonraker',
-    label: 'Restart Moonraker',
-    details: 'Перезапустить Moonraker API.',
+    label: 'Перезапустить Moonraker',
+    details: 'Перезапускает Moonraker API.',
   },
   {
     command: 'rebootHost',
-    label: 'Перезагрузить host',
+    label: 'Перезагрузить хост',
     details: 'Полная перезагрузка Linux-хоста принтера.',
     tone: 'danger',
   },
   {
     command: 'shutdownHost',
-    label: 'Выключить host',
-    details: 'Остановить host. Для включения может потребоваться физический доступ.',
+    label: 'Выключить хост',
+    details: 'Останавливает хост. Для включения может потребоваться физический доступ.',
     tone: 'danger',
   },
 ]

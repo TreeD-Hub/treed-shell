@@ -322,19 +322,48 @@ body {
 }
 
 .top-popup-action {
-  height: 42px;
+  min-height: 42px;
   border-radius: 10px;
   border: 1px solid var(--color-border-default);
   background: var(--color-surface-elevated);
   color: var(--color-text-primary);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-medium);
-  padding: 0 var(--space-sm);
+  line-height: 1.2;
+  padding: var(--space-xs) var(--space-sm);
   cursor: pointer;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  text-align: left;
 }
 
+.top-popup-action:disabled,
 .top-popup-action[aria-disabled='true'] {
   opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.top-popup-action-label {
+  display: block;
+}
+
+.top-popup-action-details {
+  display: block;
+  color: var(--color-text-soft);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.25;
+}
+
+.top-popup-action-danger .top-popup-action-details {
+  color: color-mix(in srgb, var(--color-text-primary) 72%, transparent);
+}
+
+.top-popup-action-cancel {
+  min-height: 42px;
+  justify-items: center;
+  text-align: center;
 }
 
 .top-popup-action-danger {

@@ -1005,13 +1005,15 @@ describe('App', () => {
 
     expect(screen.getByRole('dialog', { name: 'Питание и перезапуск' })).toBeInTheDocument()
 
-    const rebootHostButton = screen.getByRole('button', { name: 'Перезагрузить host' })
-    const shutdownHostButton = screen.getByRole('button', { name: 'Выключить host' })
+    const rebootHostButton = screen.getByRole('button', { name: 'Перезагрузить хост' })
+    const shutdownHostButton = screen.getByRole('button', { name: 'Выключить хост' })
 
+    expect(rebootHostButton).toBeDisabled()
     expect(rebootHostButton).toHaveAttribute('aria-disabled', 'true')
-    expect(rebootHostButton).toHaveAttribute('title', 'Перезагрузка host: capability «питание host» не подтвержден.')
+    expect(rebootHostButton).toHaveAttribute('title', 'Перезагрузка хоста: capability «питание хоста» не подтвержден.')
+    expect(shutdownHostButton).toBeDisabled()
     expect(shutdownHostButton).toHaveAttribute('aria-disabled', 'true')
-    expect(shutdownHostButton).toHaveAttribute('title', 'Выключение host: capability «питание host» не подтвержден.')
+    expect(shutdownHostButton).toHaveAttribute('title', 'Выключение хоста: capability «питание хоста» не подтвержден.')
   })
 
   it('requires repeated confirm before enabled power and service commands execute', async () => {
@@ -1038,19 +1040,19 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Питание' }))
 
-    const restartKlipperButton = screen.getByRole('button', { name: 'Restart Klipper' })
+    const restartKlipperButton = screen.getByRole('button', { name: 'Перезапустить Klipper' })
 
     expect(restartKlipperButton).not.toBeDisabled()
     expect(restartKlipperButton).toHaveAttribute('aria-disabled', 'false')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Выключить host' })).toHaveAttribute('aria-disabled', 'false')
+      expect(screen.getByRole('button', { name: 'Выключить хост' })).toHaveAttribute('aria-disabled', 'false')
     })
 
-    const shutdownHostButton = screen.getByRole('button', { name: 'Выключить host' })
+    const shutdownHostButton = screen.getByRole('button', { name: 'Выключить хост' })
     const commandCountBeforeConfirm = getMockCommandOperations().length
     fireEvent.click(shutdownHostButton)
     expect(getMockCommandOperations()).toHaveLength(commandCountBeforeConfirm)
-    fireEvent.click(screen.getByRole('button', { name: 'Подтвердить: Выключить host' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Подтвердить: Выключить хост' }))
 
     await waitFor(() => {
       expect(getMockCommandOperations()).toEqual(
@@ -1061,6 +1063,6 @@ describe('App', () => {
         ]),
       )
     })
-    expect(screen.getByText('Команда отправлена: Выключить host.')).toBeInTheDocument()
+    expect(screen.getByText('Команда отправлена: Выключить хост.')).toBeInTheDocument()
   })
 })

@@ -159,23 +159,34 @@ export function TopStatusPopups({
         {activeTopPopup === 'power' ? (
           <div className="top-popup-content">
             <p className="top-popup-warning">
-              Перезапуск сервисов может прервать печать. Host-действия используйте только когда нужен полный restart устройства.
+              Перезапуск сервисов может прервать печать. Действия с хостом используйте только для полной перезагрузки или выключения устройства.
             </p>
             <div className="top-popup-actions top-popup-power-actions">
-              {powerMenuActions.map((action) => (
-                <button
-                  key={action.command}
-                  type="button"
-                  className={`top-popup-action ${action.tone === 'danger' ? 'top-popup-action-danger' : ''}`}
-                  onClick={() => onPowerMenuAction(action.command)}
-                  disabled={isBusy}
-                  aria-disabled={action.blockReason !== null || isBusy}
-                  title={action.blockReason ?? action.details}
-                >
-                  {armedPowerCommand === action.command ? `Подтвердить: ${action.label}` : action.label}
-                </button>
-              ))}
-              <button type="button" className="top-popup-action" onClick={onClose}>
+              {powerMenuActions.map((action) => {
+                const isActionUnavailable = action.blockReason !== null || isBusy
+                const isArmed = !isActionUnavailable && armedPowerCommand === action.command
+                const buttonLabel = isArmed ? `Подтвердить: ${action.label}` : action.label
+                const actionDetails = isBusy
+                  ? 'Дождитесь завершения текущей команды.'
+                  : (action.blockReason ?? action.details)
+
+                return (
+                  <button
+                    key={action.command}
+                    type="button"
+                    className={`top-popup-action ${action.tone === 'danger' ? 'top-popup-action-danger' : ''}`}
+                    onClick={() => onPowerMenuAction(action.command)}
+                    disabled={isActionUnavailable}
+                    aria-disabled={isActionUnavailable}
+                    aria-label={buttonLabel}
+                    title={actionDetails}
+                  >
+                    <span className="top-popup-action-label">{buttonLabel}</span>
+                    <span className="top-popup-action-details">{actionDetails}</span>
+                  </button>
+                )
+              })}
+              <button type="button" className="top-popup-action top-popup-action-cancel" onClick={onClose}>
                 Отмена
               </button>
             </div>

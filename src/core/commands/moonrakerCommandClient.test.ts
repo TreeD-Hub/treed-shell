@@ -312,7 +312,7 @@ describe('createMoonrakerCommandClient', () => {
       expect.objectContaining({
         ok: false,
         kind: 'unsupported',
-        message: expect.stringContaining('not supported'),
+        message: expect.stringContaining('не поддерживается'),
       }),
     )
     expect(fetchMock).not.toHaveBeenCalled()
