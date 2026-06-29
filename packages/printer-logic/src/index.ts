@@ -37,6 +37,19 @@ export type PrinterCommandId =
   | 'loadFilament'
   | 'unloadFilament'
   | 'zParkZeroEddy'
+  | 'eddyDriveCurrentCalibrate'
+  | 'eddyPrimaryHeightStart'
+  | 'eddyPrimaryAcceptSave'
+  | 'eddyTemperatureStart'
+  | 'eddyTemperatureAcceptSave'
+  | 'eddyCheckZ0'
+  | 'eddyScrewsTiltStart'
+  | 'eddyScrewsTiltDone'
+  | 'eddyBedMeshCalibrate'
+  | 'eddyAutosaveEnable'
+  | 'eddyAutosaveDisable'
+  | 'eddyAutosaveStatus'
+  | 'eddyTestZ'
   | 'shaperCalibrateLight'
   | 'shaperCalibrateFull'
   | 'xyMotionTest'
@@ -69,6 +82,18 @@ export type ExecuteCommandArgs =
         | 'turnOffHeaters'
         | 'disableMotors'
         | 'zParkZeroEddy'
+        | 'eddyDriveCurrentCalibrate'
+        | 'eddyPrimaryHeightStart'
+        | 'eddyPrimaryAcceptSave'
+        | 'eddyTemperatureStart'
+        | 'eddyTemperatureAcceptSave'
+        | 'eddyCheckZ0'
+        | 'eddyScrewsTiltStart'
+        | 'eddyScrewsTiltDone'
+        | 'eddyBedMeshCalibrate'
+        | 'eddyAutosaveEnable'
+        | 'eddyAutosaveDisable'
+        | 'eddyAutosaveStatus'
         | 'shaperCalibrateLight'
         | 'shaperCalibrateFull'
         | 'xyMotionTest'
@@ -127,6 +152,10 @@ export type ExecuteCommandArgs =
       command: 'loadFilament' | 'unloadFilament'
       lengthMm?: number
       speedMmS?: number
+    }
+  | {
+      command: 'eddyTestZ'
+      deltaMm: number
     }
   | {
       command: 'consoleGcode'
@@ -724,6 +753,7 @@ const MAX_UI_MOVE_DISTANCE_MM = 50
 export const Z_OFFSET_BABYSTEP_STEP_OPTIONS = [0.01, 0.025, 0.05] as const
 const MIN_Z_OFFSET_BABYSTEP_DELTA_MM = Z_OFFSET_BABYSTEP_STEP_OPTIONS[0]
 const MAX_Z_OFFSET_BABYSTEP_DELTA_MM = Z_OFFSET_BABYSTEP_STEP_OPTIONS[Z_OFFSET_BABYSTEP_STEP_OPTIONS.length - 1]
+export const EDDY_TEST_Z_STEP_OPTIONS = [-1, -0.1, -0.05, 0.05, 0.1, 1] as const
 
 const COMMAND_CAPABILITY_LABELS: Record<TreeDCommandCapability, string> = {
   print: 'печать',
@@ -937,6 +967,97 @@ export const TREE_D_COMMAND_CATALOG: Record<PrinterCommandId, TreeDCommandCatalo
     capability: 'eddy',
     requiresConfirmation: false,
   },
+  eddyDriveCurrentCalibrate: {
+    id: 'eddyDriveCurrentCalibrate',
+    risk: 'caution',
+    label: 'Калибровка тока Eddy',
+    capability: 'eddy',
+    requiresConfirmation: true,
+  },
+  eddyPrimaryHeightStart: {
+    id: 'eddyPrimaryHeightStart',
+    risk: 'caution',
+    label: 'Первичная высота Eddy',
+    capability: 'eddy',
+    requiresConfirmation: false,
+  },
+  eddyPrimaryAcceptSave: {
+    id: 'eddyPrimaryAcceptSave',
+    risk: 'caution',
+    label: 'Сохранить первичную калибровку Eddy',
+    capability: 'eddy',
+    requiresConfirmation: true,
+  },
+  eddyTemperatureStart: {
+    id: 'eddyTemperatureStart',
+    risk: 'caution',
+    label: 'Температурная калибровка Eddy',
+    capability: 'eddy',
+    requiresConfirmation: true,
+  },
+  eddyTemperatureAcceptSave: {
+    id: 'eddyTemperatureAcceptSave',
+    risk: 'caution',
+    label: 'Сохранить температурную калибровку Eddy',
+    capability: 'eddy',
+    requiresConfirmation: true,
+  },
+  eddyCheckZ0: {
+    id: 'eddyCheckZ0',
+    risk: 'caution',
+    label: 'Поиск Z0 через Eddy',
+    capability: 'eddy',
+    requiresConfirmation: false,
+  },
+  eddyScrewsTiltStart: {
+    id: 'eddyScrewsTiltStart',
+    risk: 'caution',
+    label: 'Выравнивание винтов Eddy',
+    capability: 'eddy',
+    requiresConfirmation: false,
+  },
+  eddyScrewsTiltDone: {
+    id: 'eddyScrewsTiltDone',
+    risk: 'caution',
+    label: 'Винты стола выровнены',
+    capability: 'eddy',
+    requiresConfirmation: false,
+  },
+  eddyBedMeshCalibrate: {
+    id: 'eddyBedMeshCalibrate',
+    risk: 'caution',
+    label: 'Карта стола Eddy',
+    capability: 'eddy',
+    requiresConfirmation: true,
+  },
+  eddyAutosaveEnable: {
+    id: 'eddyAutosaveEnable',
+    risk: 'caution',
+    label: 'Включить автосохранение Z-offset',
+    capability: 'eddy',
+    requiresConfirmation: true,
+  },
+  eddyAutosaveDisable: {
+    id: 'eddyAutosaveDisable',
+    risk: 'caution',
+    label: 'Отключить автосохранение Z-offset',
+    capability: 'eddy',
+    requiresConfirmation: false,
+  },
+  eddyAutosaveStatus: {
+    id: 'eddyAutosaveStatus',
+    risk: 'caution',
+    label: 'Статус автосохранения Z-offset',
+    capability: 'eddy',
+    requiresConfirmation: false,
+  },
+  eddyTestZ: {
+    id: 'eddyTestZ',
+    risk: 'caution',
+    label: 'TESTZ Eddy',
+    capability: 'eddy',
+    requiresConfirmation: false,
+  },
   shaperCalibrateLight: {
     id: 'shaperCalibrateLight',
     risk: 'caution',
@@ -1052,6 +1173,18 @@ const MOTION_COMMANDS_BLOCKED_DURING_PRINT = new Set<PrinterCommandId>([
   'shaperCalibrateFull',
   'xyMotionTest',
 ])
+const EDDY_CALIBRATION_COMMANDS_BLOCKED_DURING_PRINT = new Set<PrinterCommandId>([
+  'eddyDriveCurrentCalibrate',
+  'eddyPrimaryHeightStart',
+  'eddyPrimaryAcceptSave',
+  'eddyTemperatureStart',
+  'eddyTemperatureAcceptSave',
+  'eddyCheckZ0',
+  'eddyScrewsTiltStart',
+  'eddyScrewsTiltDone',
+  'eddyBedMeshCalibrate',
+  'eddyTestZ',
+])
 
 function normalizeState(value: string | undefined): string {
   return value?.trim().toLowerCase() ?? ''
@@ -1128,6 +1261,10 @@ function getCommandSpecificBlockReason(
 
   if (activePrint && MOTION_COMMANDS_BLOCKED_DURING_PRINT.has(command)) {
     return `${item.label}: движение недоступно во время печати.`
+  }
+
+  if (activePrint && EDDY_CALIBRATION_COMMANDS_BLOCKED_DURING_PRINT.has(command)) {
+    return `${item.label}: калибровка Eddy недоступна во время печати.`
   }
 
   if (activePrint && !pausedPrint && FILAMENT_COMMANDS.has(command)) {
@@ -1238,6 +1375,11 @@ export function getTreeDCommandArgumentError(
       }
       return null
     }
+    case 'eddyTestZ':
+      if (!EDDY_TEST_Z_STEP_OPTIONS.some((step) => Math.abs(step - args.deltaMm) < 0.0001)) {
+        return `TESTZ delta должен быть одним из значений: ${EDDY_TEST_Z_STEP_OPTIONS.join(', ')}.`
+      }
+      return null
     default:
       return null
   }

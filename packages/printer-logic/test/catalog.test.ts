@@ -38,6 +38,19 @@ const ALL_COMMAND_IDS: PrinterCommandId[] = [
   'loadFilament',
   'unloadFilament',
   'zParkZeroEddy',
+  'eddyDriveCurrentCalibrate',
+  'eddyPrimaryHeightStart',
+  'eddyPrimaryAcceptSave',
+  'eddyTemperatureStart',
+  'eddyTemperatureAcceptSave',
+  'eddyCheckZ0',
+  'eddyScrewsTiltStart',
+  'eddyScrewsTiltDone',
+  'eddyBedMeshCalibrate',
+  'eddyAutosaveEnable',
+  'eddyAutosaveDisable',
+  'eddyAutosaveStatus',
+  'eddyTestZ',
   'shaperCalibrateLight',
   'shaperCalibrateFull',
   'xyMotionTest',
@@ -144,6 +157,29 @@ describe('TREE_D_COMMAND_CATALOG', () => {
     expect(getTreeDCommandCatalogItem('consoleGcode').requiresConfirmation).toBe(true)
   })
 
+  it('keeps Eddy calibration workflow commands gated as caution commands', () => {
+    for (const command of [
+      'eddyDriveCurrentCalibrate',
+      'eddyPrimaryHeightStart',
+      'eddyPrimaryAcceptSave',
+      'eddyTemperatureStart',
+      'eddyTemperatureAcceptSave',
+      'eddyCheckZ0',
+      'eddyScrewsTiltStart',
+      'eddyScrewsTiltDone',
+      'eddyBedMeshCalibrate',
+      'eddyAutosaveEnable',
+      'eddyAutosaveDisable',
+      'eddyAutosaveStatus',
+      'eddyTestZ',
+    ] as const) {
+      expect(getTreeDCommandCatalogItem(command)).toMatchObject({
+        capability: 'eddy',
+        risk: 'caution',
+      })
+    }
+  })
+
   it('blocks commands when capability is missing or connection is unsafe', () => {
     expect(getTreeDCommandBlockReason('pause', PRINTING_CONTEXT)).toBeNull()
     expect(getTreeDCommandBlockReason('pause', {
@@ -229,6 +265,7 @@ describe('TREE_D_COMMAND_CATALOG', () => {
       distanceMm: 1,
     })).toContain('во время печати')
     expect(getTreeDCommandBlockReason('disableMotors', PRINTING_CONTEXT)).toContain('во время печати')
+    expect(getTreeDCommandBlockReason('eddyBedMeshCalibrate', PRINTING_CONTEXT)).toContain('во время печати')
   })
 
   it('validates movement and heating arguments against the active profile', () => {
@@ -258,6 +295,10 @@ describe('TREE_D_COMMAND_CATALOG', () => {
       command: 'setBedTarget',
       targetCelsius: Number.NaN,
     })).toContain('конечным числом')
+    expect(getTreeDCommandBlockReason('eddyTestZ', IDLE_CONTEXT, {
+      command: 'eddyTestZ',
+      deltaMm: 0.03,
+    })).toContain('TESTZ')
   })
 
   it('allows confirmed host power and service commands without capability flags', () => {

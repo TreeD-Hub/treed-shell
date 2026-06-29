@@ -263,6 +263,49 @@ describe('createMoonrakerCommandClient', () => {
     )
   })
 
+  it('maps Eddy calibration workflow commands to TreeD wrapper macros', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ result: 'ok' }),
+    })
+    const client = createMoonrakerCommandClient({
+      moonrakerUrl: 'http://moonraker.local',
+      fetchImpl: fetchMock,
+    })
+
+    await client.execute({ command: 'eddyDriveCurrentCalibrate' })
+    await client.execute({ command: 'eddyPrimaryHeightStart' })
+    await client.execute({ command: 'eddyTestZ', deltaMm: -0.05 })
+    await client.execute({ command: 'eddyPrimaryAcceptSave' })
+    await client.execute({ command: 'eddyTemperatureStart' })
+    await client.execute({ command: 'eddyTemperatureAcceptSave' })
+    await client.execute({ command: 'eddyCheckZ0' })
+    await client.execute({ command: 'eddyScrewsTiltStart' })
+    await client.execute({ command: 'eddyScrewsTiltDone' })
+    await client.execute({ command: 'eddyBedMeshCalibrate' })
+    await client.execute({ command: 'eddyAutosaveEnable' })
+    await client.execute({ command: 'eddyAutosaveDisable' })
+    await client.execute({ command: 'eddyAutosaveStatus' })
+
+    const scripts = fetchMock.mock.calls.map((call) => JSON.parse(String((call[1] as RequestInit).body)).script)
+
+    expect(scripts).toEqual([
+      'TREED_EDDY_CALIBRATE_DRIVE_CURRENT',
+      'TREED_EDDY_PRIMARY_HEIGHT_START',
+      'TESTZ Z=-0.05',
+      'TREED_EDDY_PRIMARY_ACCEPT_SAVE',
+      'TREED_EDDY_TEMPERATURE_START',
+      'TREED_EDDY_TEMPERATURE_ACCEPT_SAVE',
+      'TREED_EDDY_CHECK_Z0',
+      'TREED_EDDY_SCREWS_TILT_START',
+      'TREED_EDDY_SCREWS_TILT_DONE',
+      'TREED_EDDY_BED_MESH_CALIBRATE',
+      'TREED_EDDY_Z_OFFSET_AUTOSAVE_ENABLE',
+      'TREED_EDDY_Z_OFFSET_AUTOSAVE_DISABLE',
+      'TREED_EDDY_Z_OFFSET_AUTOSAVE_STATUS',
+    ])
+  })
+
   it('homes X and Y independently', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

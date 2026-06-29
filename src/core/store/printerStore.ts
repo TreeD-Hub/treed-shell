@@ -148,6 +148,17 @@ export const FALLBACK_PRINTER_SNAPSHOT: PrinterSnapshot = {
       status: 'unknown',
       autosaveEnabled: false,
       autosavePending: false,
+      calibration: {
+        activeStep: 'not_started',
+        operatorPrompt: 'none',
+        driveCurrentDone: false,
+        primaryDone: false,
+        temperatureDone: false,
+        z0Done: false,
+        screwsDone: false,
+        meshDone: false,
+        requiredDone: false,
+      },
     },
   },
 }

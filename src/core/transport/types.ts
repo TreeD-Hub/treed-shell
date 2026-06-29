@@ -143,6 +143,29 @@ export interface PrinterToolheadRuntimeSnapshot {
   coordinateMode: 'raw'
 }
 
+export type PrinterEddyCalibrationStep = 'not_started' | 'primary' | 'temperature' | 'z0' | 'screws' | 'mesh' | 'complete'
+export type PrinterEddyOperatorPrompt =
+  | 'none'
+  | 'drive_current'
+  | 'paper_test'
+  | 'temperature_points'
+  | 'verify_z0'
+  | 'adjust_screws'
+  | 'mesh_scan'
+  | 'restart'
+
+export interface PrinterEddyCalibrationSnapshot {
+  activeStep: PrinterEddyCalibrationStep
+  operatorPrompt: PrinterEddyOperatorPrompt
+  driveCurrentDone: boolean
+  primaryDone: boolean
+  temperatureDone: boolean
+  z0Done: boolean
+  screwsDone: boolean
+  meshDone: boolean
+  requiredDone: boolean
+}
+
 export interface PrinterV2Snapshot {
   branch: 'treed-v2'
   profile: 'treed_v2_corexy_v1'
@@ -150,6 +173,7 @@ export interface PrinterV2Snapshot {
     status: PrinterEddyStatus
     autosaveEnabled: boolean
     autosavePending: boolean
+    calibration: PrinterEddyCalibrationSnapshot
   }
 }
 

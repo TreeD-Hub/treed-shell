@@ -694,6 +694,12 @@ function App() {
             onMaintenanceChecklistItemChange: maintenanceController.handleChecklistItemChange,
             onMaintenanceChecklistComplete: maintenanceController.handleChecklistComplete,
           }}
+          macros={{
+            snapshot,
+            pendingCommand,
+            executeCommand,
+            getCommandBlockReason,
+          }}
           settings={settingsPageProps}
         />
 

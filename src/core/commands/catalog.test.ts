@@ -37,6 +37,19 @@ const ALL_COMMAND_IDS: PrinterCommandId[] = [
   'loadFilament',
   'unloadFilament',
   'zParkZeroEddy',
+  'eddyDriveCurrentCalibrate',
+  'eddyPrimaryHeightStart',
+  'eddyPrimaryAcceptSave',
+  'eddyTemperatureStart',
+  'eddyTemperatureAcceptSave',
+  'eddyCheckZ0',
+  'eddyScrewsTiltStart',
+  'eddyScrewsTiltDone',
+  'eddyBedMeshCalibrate',
+  'eddyAutosaveEnable',
+  'eddyAutosaveDisable',
+  'eddyAutosaveStatus',
+  'eddyTestZ',
   'shaperCalibrateLight',
   'shaperCalibrateFull',
   'xyMotionTest',
@@ -144,6 +157,8 @@ describe('TREE_D_COMMAND_CATALOG', () => {
   it('keeps Eddy Z-home and TreeD calibration commands out of safe tier', () => {
     expect(getTreeDCommandCatalogItem('homeZ').risk).toBe('caution')
     expect(getTreeDCommandCatalogItem('zParkZeroEddy').risk).toBe('caution')
+    expect(getTreeDCommandCatalogItem('eddyBedMeshCalibrate').risk).toBe('caution')
+    expect(getTreeDCommandCatalogItem('eddyTestZ').risk).toBe('caution')
     expect(getTreeDCommandCatalogItem('shaperCalibrateLight').risk).toBe('caution')
     expect(getTreeDCommandCatalogItem('shaperCalibrateFull').risk).toBe('caution')
   })
@@ -245,13 +260,18 @@ describe('TREE_D_COMMAND_CATALOG', () => {
       distanceMm: 1,
     })).toContain('во время печати')
     expect(getTreeDCommandBlockReason('disableMotors', PRINTING_CONTEXT)).toContain('во время печати')
+    expect(getTreeDCommandBlockReason('eddyTemperatureStart', PRINTING_CONTEXT)).toContain('во время печати')
   })
 
-  it('validates filament arguments', () => {
+  it('validates filament and Eddy paper-test arguments', () => {
     expect(getTreeDCommandBlockReason('loadFilament', IDLE_CONTEXT, {
       command: 'loadFilament',
       lengthMm: 0,
     })).toContain('LENGTH')
+    expect(getTreeDCommandBlockReason('eddyTestZ', IDLE_CONTEXT, {
+      command: 'eddyTestZ',
+      deltaMm: 0.03,
+    })).toContain('TESTZ')
   })
 
   it('allows confirmed host power and service commands without capability flags', () => {

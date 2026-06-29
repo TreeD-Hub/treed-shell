@@ -742,21 +742,26 @@ describe('App', () => {
     }
   })
 
-  it('keeps macros tab empty after removing temporary implementation', () => {
+  it('renders Eddy calibration workflow in macros tab and dispatches Eddy commands', async () => {
     render(<App />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Макросы' }))
 
     expect(screen.getByTestId('screen-macros')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Макросы' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByTestId('screen-macros').textContent).toBe('')
-    expect(screen.queryByTestId('macros-group-bedMesh')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('macros-bed-manual-card')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('macros-bed-auto-card')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('macros-bed-zoffset-card')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('macros-bed-map-workspace')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('macros-bed-intro-modal')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('macros-zoffset-value')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Калибровка Eddy' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Первичная калибровка Eddy' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Температурная калибровка' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Поиск Z0' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Выравнивание винтов стола' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Построение карты стола' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Автосохранение Z-offset' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Поиск Z0' }))
+
+    await waitFor(() => {
+      expect(getMockCommandOperations()).toContainEqual({ command: 'eddyCheckZ0' })
+    })
   })
 
   it('opens print file modal and handles start and delete actions', async () => {

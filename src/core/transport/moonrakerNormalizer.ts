@@ -1,6 +1,9 @@
 import type {
   PrinterCapabilitiesSnapshot,
   PrinterConnectionState,
+  PrinterEddyCalibrationSnapshot,
+  PrinterEddyCalibrationStep,
+  PrinterEddyOperatorPrompt,
   PrinterFileItemSnapshot,
   PrinterFilesSnapshot,
   PrinterGeometrySnapshot,
@@ -48,6 +51,7 @@ export interface MoonrakerPrinterObjectsStatus {
   display_status?: MoonrakerDisplayStatus
   pause_resume?: MoonrakerPauseResumeStatus
   webhooks?: MoonrakerWebhooksStatus
+  save_variables?: MoonrakerSaveVariablesStatus
   [key: string]: unknown
 }
 
@@ -119,6 +123,10 @@ export interface MoonrakerPauseResumeStatus {
 export interface MoonrakerWebhooksStatus {
   state?: string
   state_message?: string
+}
+
+export interface MoonrakerSaveVariablesStatus {
+  variables?: Record<string, unknown>
 }
 
 export interface MoonrakerNormalizeOptions {
@@ -927,10 +935,56 @@ function normalizeEddyStatus(
   return 'unknown'
 }
 
+const EDDY_CALIBRATION_STEPS = new Set<PrinterEddyCalibrationStep>([
+  'not_started',
+  'primary',
+  'temperature',
+  'z0',
+  'screws',
+  'mesh',
+  'complete',
+])
+
+const EDDY_OPERATOR_PROMPTS = new Set<PrinterEddyOperatorPrompt>([
+  'none',
+  'drive_current',
+  'paper_test',
+  'temperature_points',
+  'verify_z0',
+  'adjust_screws',
+  'mesh_scan',
+  'restart',
+])
+
+function normalizeStringEnum<T extends string>(value: unknown, allowed: Set<T>, fallback: T): T {
+  return typeof value === 'string' && allowed.has(value as T) ? value as T : fallback
+}
+
+function readSavedFlag(variables: Record<string, unknown>, key: string): boolean {
+  return parseMacroBoolean(variables[key]) === true
+}
+
+function normalizeEddyCalibration(status: MoonrakerPrinterObjectsStatus): PrinterEddyCalibrationSnapshot {
+  const variables = status.save_variables?.variables ?? {}
+
+  return {
+    activeStep: normalizeStringEnum(variables.treed_eddy_active_step, EDDY_CALIBRATION_STEPS, 'not_started'),
+    operatorPrompt: normalizeStringEnum(variables.treed_eddy_operator_prompt, EDDY_OPERATOR_PROMPTS, 'none'),
+    driveCurrentDone: readSavedFlag(variables, 'treed_eddy_drive_current_done'),
+    primaryDone: readSavedFlag(variables, 'treed_eddy_primary_done'),
+    temperatureDone: readSavedFlag(variables, 'treed_eddy_temperature_done'),
+    z0Done: readSavedFlag(variables, 'treed_eddy_z0_done'),
+    screwsDone: readSavedFlag(variables, 'treed_eddy_screws_done'),
+    meshDone: readSavedFlag(variables, 'treed_eddy_mesh_done'),
+    requiredDone: readSavedFlag(variables, 'treed_eddy_required_done'),
+  }
+}
+
 function normalizeV2Snapshot(
   macros: PrinterMacroStateSnapshot,
   webhooks: MoonrakerWebhooksStatus,
   homedAxes: string,
+  status: MoonrakerPrinterObjectsStatus,
 ): PrinterV2Snapshot {
   const eddyAutosave = readMacro(macros.values, '_TREED_EDDY_Z_OFFSET_AUTOSAVE_STATE')
 
@@ -941,6 +995,7 @@ function normalizeV2Snapshot(
       status: normalizeEddyStatus(webhooks, homedAxes),
       autosaveEnabled: Boolean(eddyAutosave?.enabled),
       autosavePending: Boolean(eddyAutosave?.has_pending),
+      calibration: normalizeEddyCalibration(status),
     },
   }
 }
@@ -1053,7 +1108,7 @@ export function normalizeMoonrakerRuntimeSnapshot(
     runtimeTune: normalizeRuntimeTune(status.toolhead, gcodeMove, status.extruder, status.firmware_retraction, macros),
     macros,
     printFiles: normalizeMoonrakerPrintFiles(options.printFiles ?? [], { moonrakerUrl: options.moonrakerUrl }),
-    v2: normalizeV2Snapshot(macros, webhooks, homedAxes),
+    v2: normalizeV2Snapshot(macros, webhooks, homedAxes, status),
   }
 }
 

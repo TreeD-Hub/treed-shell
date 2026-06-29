@@ -91,6 +91,37 @@ describe('normalizeMoonrakerRuntimeSnapshot', () => {
     expect(snapshot.capabilities.motion).toBe(false)
   })
 
+  it('normalizes persisted Eddy calibration workflow state from save_variables', () => {
+    const snapshot = normalizeMoonrakerRuntimeSnapshot(buildPayload({
+      webhooks: { state: 'ready' },
+      save_variables: {
+        variables: {
+          treed_eddy_active_step: 'temperature',
+          treed_eddy_operator_prompt: 'restart',
+          treed_eddy_drive_current_done: 1,
+          treed_eddy_primary_done: 1,
+          treed_eddy_temperature_done: 0,
+          treed_eddy_z0_done: 0,
+          treed_eddy_screws_done: 0,
+          treed_eddy_mesh_done: 0,
+          treed_eddy_required_done: 0,
+        },
+      },
+    }))
+
+    expect(snapshot.v2.eddy.calibration).toEqual({
+      activeStep: 'temperature',
+      operatorPrompt: 'restart',
+      driveCurrentDone: true,
+      primaryDone: true,
+      temperatureDone: false,
+      z0Done: false,
+      screwsDone: false,
+      meshDone: false,
+      requiredDone: false,
+    })
+  })
+
   it('normalizes Moonraker file list and metadata into V2 print cards', () => {
     const files = normalizeMoonrakerPrintFiles(
       [

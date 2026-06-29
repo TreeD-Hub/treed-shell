@@ -42,8 +42,10 @@ describe('normalizeMoonrakerSnapshot', () => {
     expect(MOONRAKER_RUNTIME_OBJECTS_QUERY).toContain('gcode_macro%20LIGHT_ON')
     expect(MOONRAKER_RUNTIME_OBJECTS_QUERY).toContain('gcode_macro%20LIGHT_OFF')
     expect(MOONRAKER_RUNTIME_OBJECTS_QUERY).toContain('firmware_retraction')
+    expect(MOONRAKER_RUNTIME_OBJECTS_QUERY).toContain('save_variables')
     expect(MOONRAKER_RUNTIME_OBJECTS_QUERY).toContain('gcode_macro%20_TREED_UI_TUNE_STATE')
     expect(MOONRAKER_RUNTIME_OBJECTS_QUERY).toContain('gcode_macro%20_TREED_UI_CONTRACT')
+    expect(MOONRAKER_RUNTIME_OBJECTS_QUERY).toContain('gcode_macro%20_TREED_EDDY_CALIBRATION_STATE')
     expect(MOONRAKER_RUNTIME_OBJECTS_QUERY).toContain('gcode_macro%20TREED_UI_MOVE_AXIS')
   })
 
