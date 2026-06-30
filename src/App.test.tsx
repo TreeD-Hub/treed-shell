@@ -750,15 +750,18 @@ describe('App', () => {
     expect(screen.getByTestId('screen-macros')).toBeInTheDocument()
     expect(screen.getByTestId('macros-manager')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Макросы' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('heading', { name: 'Менеджер макросов' })).toBeInTheDocument()
-    expect(
+    expect(screen.getByRole('heading', { name: 'Выберите проход' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('macros-manager-workflows')).getAllByRole('button')).toHaveLength(1)
+
+    fireEvent.click(
       within(screen.getByTestId('macros-manager-workflows')).getByRole('button', {
-        name: 'Eddy Калибровка датчика 0/5',
+        name: 'Калибровка датчика уровня 0/5',
       }),
-    ).toHaveAttribute('aria-current', 'true')
-    expect(screen.getByRole('heading', { name: 'Калибровка Eddy' })).toBeInTheDocument()
+    )
+
+    expect(screen.getByRole('heading', { name: 'Калибровка датчика уровня' })).toBeInTheDocument()
     expect(screen.getByText('Шаг 1 из 6')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Первичная калибровка Eddy' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Первичная калибровка датчика' })).toBeInTheDocument()
     expect(screen.queryByTestId('eddy-step-list')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Калибровать ток' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Начать paper test' })).toBeInTheDocument()

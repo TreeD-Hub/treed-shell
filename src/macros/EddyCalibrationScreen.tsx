@@ -13,6 +13,7 @@ type EddyCalibrationScreenProps = {
   pendingCommand: PrinterCommandId | null
   executeCommand: (args: ExecuteCommandArgs) => Promise<boolean>
   getCommandBlockReason: (command: PrinterCommandId, args?: ExecuteCommandArgs) => string | null
+  onBackToList: () => void
 }
 
 type WizardStepId = 'primary' | 'temperature' | 'z0' | 'screws' | 'mesh' | 'autosave'
@@ -26,7 +27,7 @@ type WizardStep = {
 const WIZARD_STEPS: readonly WizardStep[] = [
   {
     id: 'primary',
-    title: 'Первичная калибровка Eddy',
+    title: 'Первичная калибровка датчика',
     done: (calibration) => calibration.primaryDone,
   },
   {
@@ -82,6 +83,7 @@ export function EddyCalibrationScreen({
   pendingCommand,
   executeCommand,
   getCommandBlockReason,
+  onBackToList,
 }: EddyCalibrationScreenProps) {
   const calibration = snapshot.v2.eddy.calibration
   const [currentStepIndex, setCurrentStepIndex] = useState(() => ACTIVE_STEP_INDEX[calibration.activeStep])
@@ -200,9 +202,12 @@ export function EddyCalibrationScreen({
   return (
     <article className="macros-eddy-workflow">
       <header className="macros-eddy-workflow-header">
+        <button type="button" className="macros-eddy-back-btn" onClick={onBackToList}>
+          К списку
+        </button>
         <div className="macros-eddy-title-group">
           <p className="macros-eddy-kicker">Workflow</p>
-          <h2>Калибровка Eddy</h2>
+          <h2>Калибровка датчика уровня</h2>
         </div>
         <div className="macros-eddy-summary" aria-label="Прогресс обязательной калибровки">
           <strong>{completedRequiredCount}/5</strong>
